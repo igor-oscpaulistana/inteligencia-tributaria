@@ -72,6 +72,20 @@ export async function processarExecucao(
     await gravacao;
 
     await repositorio.sistemaSalvarTriagem(execucaoId, resultado, arquivos);
+
+    // Cliente cadastrado só pela pasta: o CNPJ passa a ser o da EFD-Contribuições
+    // conferida, e as próximas triagens são comparadas com ele.
+    const contribuicoes = resultado.escrituracoes.filter(
+      (e) => e.tipo === "efd_contribuicoes" && e.compativel,
+    );
+    if (!cliente.cnpj && resultado.apta && contribuicoes.length === 1) {
+      await repositorio.sistemaRegistrarCnpj(cliente.id, contribuicoes[0].cnpj);
+      await repositorio.registrarEvento({
+        ...base,
+        acao: "cliente.cnpj_registrado",
+        detalhes: { cnpj: contribuicoes[0].cnpj, origem: contribuicoes[0].caminho },
+      });
+    }
     const impeditivas = resultado.pendencias.filter((p) => p.gravidade === "impeditiva").length;
     await repositorio.sistemaAtualizarEtapa(execucaoId, "triagem", {
       estado: "concluida",

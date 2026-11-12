@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { ArquivoTriado, ResultadoTriagem } from "@/lib/agentes/triagem";
-import { CLIENTES_FICTICIOS } from "@/lib/arquivos/dados-ficticios";
 import type { TipoFonte } from "@/lib/arquivos/tipos";
 import {
   etapasIniciais,
@@ -24,29 +23,26 @@ import {
  * instâncias; serve para validar o fluxo localmente, não para produção.
  */
 export class RepositorioMemoria implements Repositorio {
-  private readonly clientes: Cliente[];
+  private readonly clientes: Cliente[] = [];
   private readonly execucoes = new Map<string, Execucao>();
   private readonly arquivos = new Map<string, ArquivoTriado[]>();
   readonly eventos: Array<EventoAuditoria & { em: string }> = [];
 
-  constructor(
-    clientes: Cliente[] = CLIENTES_FICTICIOS.map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      cnpj: c.cnpj,
-      pastaOnedrive: c.pasta,
-    })),
-    private readonly agora: () => Date = () => new Date(),
-  ) {
-    this.clientes = clientes;
-  }
+  constructor(private readonly agora: () => Date = () => new Date()) {}
 
-  async listarClientes(): Promise<Cliente[]> {
-    return [...this.clientes];
-  }
-
-  async obterCliente(_usuario: Usuario, clienteId: string): Promise<Cliente | null> {
-    return this.clientes.find((c) => c.id === clienteId) ?? null;
+  async registrarCliente(usuario: Usuario, pasta: string): Promise<Cliente> {
+    const existente = this.clientes.find((c) => c.pastaOnedrive === pasta);
+    if (existente) return { ...existente };
+    const cliente: Cliente = { id: randomUUID(), nome: pasta, cnpj: null, pastaOnedrive: pasta };
+    this.clientes.push(cliente);
+    await this.registrarEvento({
+      acao: "cliente.cadastrado",
+      usuarioId: usuario.id,
+      clienteId: cliente.id,
+      execucaoId: null,
+      detalhes: { nome: cliente.nome, pasta },
+    });
+    return { ...cliente };
   }
 
   async criarExecucao(
@@ -102,7 +98,7 @@ export class RepositorioMemoria implements Repositorio {
   async sistemaCarregar(execucaoId: string) {
     const execucao = this.execucoes.get(execucaoId);
     const cliente = this.clientes.find((c) => c.id === execucao?.clienteId);
-    return execucao && cliente ? { execucao: structuredClone(execucao), cliente } : null;
+    return execucao && cliente ? { execucao: structuredClone(execucao), cliente: { ...cliente } } : null;
   }
 
   async sistemaAtualizarExecucao(
@@ -137,6 +133,11 @@ export class RepositorioMemoria implements Repositorio {
     execucao.triagem = resultado;
     execucao.atualizadaEm = this.agora().toISOString();
     this.arquivos.set(execucaoId, arquivos);
+  }
+
+  async sistemaRegistrarCnpj(clienteId: string, cnpj: string): Promise<void> {
+    const cliente = this.clientes.find((c) => c.id === clienteId);
+    if (cliente && !cliente.cnpj) cliente.cnpj = cnpj;
   }
 
   async registrarEvento(evento: EventoAuditoria): Promise<void> {

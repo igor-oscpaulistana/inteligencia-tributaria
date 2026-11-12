@@ -1,12 +1,17 @@
 import { comUsuario } from "@/lib/api";
-import { obterRepositorio } from "@/lib/servicos";
+import { criarFonteArquivos } from "@/lib/servicos";
 
-/** Clientes que o usuário autenticado pode auditar. */
+/**
+ * Clientes disponíveis para auditoria: as pastas de "Inteligência Tributária".
+ * O cadastro no banco acontece quando a auditoria de uma pasta é pedida.
+ */
 export async function GET() {
-  return comUsuario(async (usuario) => {
-    const clientes = await obterRepositorio().listarClientes(usuario);
-    return Response.json({
-      clientes: clientes.map(({ id, nome, cnpj }) => ({ id, nome, cnpj })),
-    });
+  return comUsuario(async () => {
+    const fonte = criarFonteArquivos();
+    const pastas = (await fonte.listarRaiz())
+      .filter((item) => item.pasta)
+      .map((item) => item.nome)
+      .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return Response.json({ origem: fonte.tipo, clientes: pastas.map((pasta) => ({ pasta })) });
   });
 }

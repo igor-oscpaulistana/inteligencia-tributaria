@@ -32,7 +32,7 @@ npm run build
 
 ## O que a etapa 1 faz
 
-1. O analista escolhe o cliente e a competência (exibida como `MM/AAAA`). Só aparecem os clientes em que ele tem permissão e as competências que têm pasta no OneDrive.
+1. O usuário escolhe o cliente e a competência (exibida como `MM/AAAA`). Os clientes são as pastas de `Inteligência Tributária` e as competências, as subpastas de cada cliente.
 2. `POST /api/execucoes` registra a execução e responde na hora; a leitura dos arquivos continua em segundo plano e grava o andamento por etapa.
 3. A **Triagem** localiza a pasta, lê os três conjuntos de arquivos, confere CNPJ e período e registra o que está ausente ou incompatível. Das notas, separa as de saída do cliente (as de entrada, de terceiros, canceladas, repetidas ou de outra competência ficam fora do cálculo).
 4. O escritório virtual mostra o estado de cada estação a partir do que foi registrado. A Retificação aparece como **Aguardando aprovação** e não tem como iniciar.
@@ -63,17 +63,20 @@ Os nomes servem apenas para chegar à competência. O tipo de cada arquivo é de
 
 1. Crie um projeto (sugestão: região `sa-east-1`) e aplique `supabase/migrations/`.
 2. Preencha `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` e `SUPABASE_SECRET_KEY`.
-3. Crie os usuários em Authentication (e-mail e senha) e cadastre clientes e permissões:
+3. Crie cada usuário em Authentication (e-mail e senha) e inclua a conta na lista de autorizados:
 
 ```sql
-insert into public.clientes (nome, cnpj, pasta_onedrive)
-values ('<Nome do cliente>', '<CNPJ só com letras e números>', '<Nome exato da pasta no OneDrive>');
-
-insert into public.cliente_membros (cliente_id, usuario_id, papel)
-values ('<id do cliente>', '<id do usuário em auth.users>', 'analista'); -- leitor | analista | administrador
+insert into public.usuarios_autorizados (usuario_id)
+select id from auth.users where email = '<e-mail do usuário>';
 ```
 
-O que o banco garante: cada usuário só vê os clientes em que é membro; só analistas e administradores criam execuções; andamento, triagem e inventário são gravados apenas pelo servidor; há uma única execução ativa por cliente e competência; a etapa de Retificação não sai de `aguardando_aprovacao`; a trilha de auditoria só aceita inclusão.
+O acesso é só por e-mail e senha, com pelo menos 8 caracteres; a troca de senha fica em `/senha`. No painel do Supabase, em Authentication, ajuste o tamanho mínimo da senha para 8 e desative o cadastro de novos usuários.
+
+No MVP não há segregação por analista: quem está em `usuarios_autorizados` vê e audita todos os clientes. Estar autenticado não basta; uma conta fora da lista não enxerga nada, nem as pastas do OneDrive.
+
+Não há cadastro manual de clientes. Os clientes disponíveis são as pastas de `Inteligência Tributária`; o registro no banco é criado quando alguém pede a auditoria de uma pasta, e o CNPJ é gravado a partir da EFD-Contribuições na primeira triagem sem pendência impeditiva. As triagens seguintes são conferidas contra esse CNPJ.
+
+O que o banco garante: só contas autorizadas leem e criam; andamento, triagem, inventário e CNPJ são gravados apenas pelo servidor; há uma única execução ativa por cliente e competência; a etapa de Retificação não sai de `aguardando_aprovacao`; a trilha de auditoria só aceita inclusão.
 
 ### OneDrive (Microsoft Graph e Entra ID)
 

@@ -79,12 +79,16 @@ export type ResultadoCriacao =
 /**
  * Persistência de clientes, execuções e trilha de auditoria.
  *
- * Os métodos que recebem `usuario` só devolvem o que ele pode ver. Os métodos
+ * No MVP não há segregação por analista: todo usuário autorizado vê todos os
+ * clientes. Os métodos que recebem `usuario` passam pela sessão dele; os métodos
  * `sistema*` são usados pelo executor, depois que a execução já foi autorizada.
  */
 export interface Repositorio {
-  listarClientes(usuario: Usuario): Promise<Cliente[]>;
-  obterCliente(usuario: Usuario, clienteId: string): Promise<Cliente | null>;
+  /**
+   * Localiza o cliente pela pasta do OneDrive ou o cadastra, se ainda não existir.
+   * Quem chama já conferiu que a pasta existe em "Inteligência Tributária".
+   */
+  registrarCliente(usuario: Usuario, pasta: string): Promise<Cliente>;
   criarExecucao(
     usuario: Usuario,
     cliente: Cliente,
@@ -106,6 +110,8 @@ export interface Repositorio {
     resultado: ResultadoTriagem,
     arquivos: ArquivoTriado[],
   ): Promise<void>;
+  /** Grava o CNPJ lido na EFD-Contribuições em um cliente que ainda não tem CNPJ. */
+  sistemaRegistrarCnpj(clienteId: string, cnpj: string): Promise<void>;
   registrarEvento(evento: EventoAuditoria): Promise<void>;
 }
 

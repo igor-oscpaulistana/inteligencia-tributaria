@@ -22,7 +22,8 @@ import {
 
 const VIOLACAO_DE_UNICIDADE = "23505";
 const LOTE_ARQUIVOS = 500;
-const SELECAO_EXECUCAO = "*, clientes(id, nome, cnpj, pasta_onedrive), execucao_etapas(*)";
+const COLUNAS_CLIENTE = "id, nome, cnpj, pasta_onedrive";
+const SELECAO_EXECUCAO = `*, clientes(${COLUNAS_CLIENTE}), execucao_etapas(*)`;
 
 interface LinhaCliente {
   id: string;
@@ -103,26 +104,31 @@ export class RepositorioSupabase implements Repositorio {
     return this.servidor;
   }
 
-  async listarClientes(): Promise<Cliente[]> {
+  async registrarCliente(_usuario: Usuario, pasta: string): Promise<Cliente> {
     const supabase = await supabaseDoUsuario(this.config);
-    const linhas = exigir(
-      await supabase.from("clientes").select("id, nome, cnpj, pasta_onedrive").order("nome"),
-      "listar clientes",
-    ) as LinhaCliente[];
-    return linhas.map(paraCliente);
-  }
+    const localizar = async () =>
+      exigir(
+        await supabase.from("clientes").select(COLUNAS_CLIENTE).eq("pasta_onedrive", pasta).maybeSingle(),
+        "localizar cliente",
+      ) as LinhaCliente | null;
 
-  async obterCliente(_usuario: Usuario, clienteId: string): Promise<Cliente | null> {
-    const supabase = await supabaseDoUsuario(this.config);
-    const linha = exigir(
-      await supabase
-        .from("clientes")
-        .select("id, nome, cnpj, pasta_onedrive")
-        .eq("id", clienteId)
-        .maybeSingle(),
-      "obter cliente",
-    ) as LinhaCliente | null;
-    return linha ? paraCliente(linha) : null;
+    const existente = await localizar();
+    if (existente) return paraCliente(existente);
+
+    // A inclusão usa a sessão do usuário: a RLS confere a autorização e o
+    // gatilho registra o cadastro na trilha de auditoria.
+    const resposta = await supabase
+      .from("clientes")
+      .insert({ nome: pasta, pasta_onedrive: pasta })
+      .select(COLUNAS_CLIENTE)
+      .single();
+    if (resposta.error?.code === VIOLACAO_DE_UNICIDADE) {
+      // Outra requisição cadastrou a mesma pasta, ou o cliente existe e está inativo.
+      const criado = await localizar();
+      if (criado) return paraCliente(criado);
+      throw new Error(`O cliente da pasta "${pasta}" está inativo.`);
+    }
+    return paraCliente(exigir(resposta, "cadastrar cliente") as LinhaCliente);
   }
 
   async criarExecucao(
@@ -306,6 +312,13 @@ export class RepositorioSupabase implements Repositorio {
     exigir(
       await admin.from("execucoes").update({ triagem: resultado }).eq("id", execucaoId),
       "gravar triagem",
+    );
+  }
+
+  async sistemaRegistrarCnpj(clienteId: string, cnpj: string): Promise<void> {
+    exigir(
+      await this.admin().from("clientes").update({ cnpj }).eq("id", clienteId).is("cnpj", null),
+      "registrar CNPJ do cliente",
     );
   }
 

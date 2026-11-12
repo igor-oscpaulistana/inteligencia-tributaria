@@ -14,13 +14,14 @@ export function uuidValido(valor: unknown): valor is string {
   return typeof valor === "string" && UUID.test(valor);
 }
 
-/** Executa a rota com o usuário autenticado e traduz falhas em respostas JSON. */
+/** Executa a rota com o usuário autenticado e autorizado e traduz falhas em respostas JSON. */
 export async function comUsuario(
   rota: (usuario: Usuario) => Promise<Response>,
 ): Promise<Response> {
   try {
     const usuario = await obterUsuario();
     if (!usuario) return erro(401, "Sessão expirada. Entre novamente.");
+    if (!usuario.autorizado) return erro(403, "Sua conta não tem acesso a este sistema.");
     return await rota(usuario);
   } catch (falha) {
     // Erros de controle do próprio Next (pré-renderização, redirect) seguem adiante.

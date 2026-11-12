@@ -3,14 +3,17 @@ import { FonteFicticia } from "@/lib/arquivos/ficticia";
 import { ErroFonteArquivos, type FonteArquivos } from "@/lib/arquivos/tipos";
 import { lerConfiguracao } from "@/lib/config";
 import { execucaoAtiva, situacaoDasEstacoes } from "./apresentacao";
+import { validarNovaSenha } from "@/lib/auth/senha";
 import { processarExecucao } from "./executor";
 import { RepositorioMemoria } from "./repositorio-memoria";
 import type { Usuario } from "./tipos";
 
 const usuario: Usuario = { id: "u1", nome: "Analista Teste", email: null };
 
+const PASTAS = ["Comercial Horizonte", "Distribuidora Aurora"];
+
 async function criar(repositorio: RepositorioMemoria, indiceCliente: number, competencia: string) {
-  const cliente = (await repositorio.listarClientes())[indiceCliente];
+  const cliente = await repositorio.registrarCliente(usuario, PASTAS[indiceCliente]);
   const criacao = await repositorio.criarExecucao(usuario, cliente, competencia, "ficticia");
   if (criacao.tipo !== "criada") throw new Error("execução não criada");
   return criacao.execucao;
@@ -44,7 +47,35 @@ describe("executor", () => {
     expect(final.etapas[0].iniciadaEm).not.toBeNull();
     expect(final.etapas[0].concluidaEm).not.toBeNull();
     expect(await repositorio.listarArquivos(usuario, criada.id)).toHaveLength(16);
-    expect(repositorio.eventos.map((e) => e.acao)).toEqual(["triagem.iniciada", "triagem.concluida"]);
+    expect(repositorio.eventos.map((e) => e.acao)).toEqual([
+      "cliente.cadastrado",
+      "triagem.iniciada",
+      "cliente.cnpj_registrado",
+      "triagem.concluida",
+    ]);
+  });
+
+  it("cadastra o cliente pela pasta e grava o CNPJ lido na EFD-Contribuições", async () => {
+    const repositorio = new RepositorioMemoria();
+    const criada = await criar(repositorio, 0, "2026-05");
+    const antes = await repositorio.registrarCliente(usuario, "Comercial Horizonte");
+    expect(antes).toMatchObject({ nome: "Comercial Horizonte", pastaOnedrive: "Comercial Horizonte", cnpj: null });
+
+    await processarExecucao(criada.id, { repositorio, fonte: new FonteFicticia() });
+
+    // A mesma pasta devolve o mesmo cliente, agora com o CNPJ da escrituração.
+    const depois = await repositorio.registrarCliente(usuario, "Comercial Horizonte");
+    expect(depois.id).toBe(antes.id);
+    expect(depois.cnpj).toBe("11222333000181");
+    expect(repositorio.eventos.filter((e) => e.acao === "cliente.cadastrado")).toHaveLength(1);
+  });
+
+  it("não grava CNPJ quando a triagem tem pendência impeditiva", async () => {
+    const repositorio = new RepositorioMemoria();
+    const criada = await criar(repositorio, 0, "2026-06");
+    await processarExecucao(criada.id, { repositorio, fonte: new FonteFicticia() });
+    expect((await repositorio.registrarCliente(usuario, "Comercial Horizonte")).cnpj).toBeNull();
+    expect(repositorio.eventos.some((e) => e.acao === "cliente.cnpj_registrado")).toBe(false);
   });
 
   it("encerra com pendências quando falta arquivo", async () => {
@@ -91,8 +122,8 @@ describe("executor", () => {
 describe("repositório em memória", () => {
   it("impede duas execuções ativas da mesma competência e libera após o término", async () => {
     const repositorio = new RepositorioMemoria();
-    const cliente = (await repositorio.listarClientes())[0];
     const primeira = await criar(repositorio, 0, "2026-05");
+    const cliente = await repositorio.registrarCliente(usuario, PASTAS[0]);
     expect(await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia")).toEqual({
       tipo: "conflito",
       execucaoId: primeira.id,
@@ -106,9 +137,9 @@ describe("repositório em memória", () => {
 
   it("libera a competência quando a execução anterior ficou sem sinal de vida", async () => {
     let agora = new Date("2026-07-01T10:00:00Z");
-    const repositorio = new RepositorioMemoria(undefined, () => agora);
-    const cliente = (await repositorio.listarClientes())[0];
+    const repositorio = new RepositorioMemoria(() => agora);
     const travada = await criar(repositorio, 0, "2026-05");
+    const cliente = await repositorio.registrarCliente(usuario, PASTAS[0]);
 
     agora = new Date("2026-07-01T10:16:00Z");
     expect((await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia")).tipo).toBe("criada");
@@ -212,5 +243,13 @@ describe("configuração", () => {
     const parcial = lerConfiguracao({ ...supabase, MS_TENANT_ID: "t" });
     expect(parcial.fonte).toBe("ficticia");
     expect(parcial.avisos[0]).toMatch(/MS_CLIENT_ID, MS_CLIENT_SECRET, ONEDRIVE_DRIVE_ID/);
+  });
+});
+
+describe("regra de senha", () => {
+  it("exige pelo menos 8 caracteres e confirmação igual", () => {
+    expect(validarNovaSenha("1234567", "1234567")).toMatch(/pelo menos 8/);
+    expect(validarNovaSenha("12345678", "12345679")).toMatch(/não confere/);
+    expect(validarNovaSenha("12345678", "12345678")).toBeNull();
   });
 });

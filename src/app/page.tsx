@@ -26,17 +26,31 @@ async function EscritorioDoUsuario() {
   const usuario = await obterUsuario();
   if (!usuario) redirect("/login");
 
+  if (!usuario.autorizado) {
+    return (
+      <div className="login">
+        <div className="card login-card">
+          <h1>Sem acesso</h1>
+          <p className="muted small" style={{ marginBottom: 16 }}>
+            A conta {usuario.email ?? usuario.nome} não está autorizada a usar o Inteligência Tributária. Peça a
+            liberação a quem administra o sistema.
+          </p>
+          <form action={sair}>
+            <button className="secondary" type="submit">
+              Sair
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   const config = obterConfiguracao();
-  const repositorio = obterRepositorio(config);
-  const [clientes, ultima] = await Promise.all([
-    repositorio.listarClientes(usuario),
-    repositorio.ultimaExecucao(usuario),
-  ]);
+  const ultima = await obterRepositorio(config).ultimaExecucao(usuario);
 
   return (
     <Escritorio
       nomeUsuario={usuario.nome}
-      clientes={clientes.map(({ id, nome }) => ({ id, nome }))}
       execucaoInicial={ultima}
       ambiente={{
         fonte: config.fonte,

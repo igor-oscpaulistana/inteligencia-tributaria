@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DEFINICOES_AGENTES } from "@/lib/agentes/definicoes";
 import type { TipoFonte } from "@/lib/arquivos/tipos";
@@ -7,7 +8,7 @@ import { formatarCompetencia } from "@/lib/competencia";
 import { execucaoAtiva, resumoDaExecucao, situacaoDasEstacoes } from "@/lib/execucoes/apresentacao";
 import type { AgenteId, Execucao } from "@/lib/execucoes/tipos";
 import { CenaEscritorio } from "./CenaEscritorio";
-import { DialogoNovaAuditoria, type ClienteDoPainel } from "./DialogoNovaAuditoria";
+import { DialogoNovaAuditoria } from "./DialogoNovaAuditoria";
 import { PainelTriagem } from "./PainelTriagem";
 
 export interface AmbientePainel {
@@ -17,7 +18,6 @@ export interface AmbientePainel {
 
 interface Props {
   nomeUsuario: string;
-  clientes: ClienteDoPainel[];
   execucaoInicial: Execucao | null;
   ambiente: AmbientePainel;
   /** Ação de saída; ausente no modo de demonstração. */
@@ -31,7 +31,7 @@ function horario(iso: string | null): string | null {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-export function Escritorio({ nomeUsuario, clientes, execucaoInicial, ambiente, sair }: Props) {
+export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Props) {
   const [execucao, setExecucao] = useState(execucaoInicial);
   const [selecionada, setSelecionada] = useState<AgenteId>("triagem");
   const [dialogoAberto, setDialogoAberto] = useState(false);
@@ -68,12 +68,12 @@ export function Escritorio({ nomeUsuario, clientes, execucaoInicial, ambiente, s
     };
   }, [ativa, execucaoId]);
 
-  async function iniciar(clienteId: string, competencia: string): Promise<string | null> {
+  async function iniciar(pasta: string, competencia: string): Promise<string | null> {
     try {
       const resposta = await fetch("/api/execucoes", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clienteId, competencia }),
+        body: JSON.stringify({ pasta, competencia }),
       });
       const corpo = await resposta.json();
       if (resposta.status === 409 && corpo.execucaoId) {
@@ -111,6 +111,11 @@ export function Escritorio({ nomeUsuario, clientes, execucaoInicial, ambiente, s
           <div className="top-side">
             {ficticio && <span className="demo">Dados demonstrativos</span>}
             <span className="user">{nomeUsuario}</span>
+            {sair && (
+              <Link className="top-link" href="/senha">
+                Alterar senha
+              </Link>
+            )}
             {sair && (
               <form action={sair}>
                 <button className="secondary" type="submit">
@@ -282,7 +287,6 @@ export function Escritorio({ nomeUsuario, clientes, execucaoInicial, ambiente, s
 
       <DialogoNovaAuditoria
         aberto={dialogoAberto}
-        clientes={clientes}
         dadosFicticios={ficticio}
         aoFechar={() => setDialogoAberto(false)}
         aoIniciar={iniciar}

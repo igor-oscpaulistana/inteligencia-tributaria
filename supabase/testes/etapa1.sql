@@ -145,6 +145,8 @@ select pg_temp.espera_erro(
   $$update public.trilha_auditoria set acao = 'alterada'$$, '42501', 'trilha não aceita alteração');
 select pg_temp.espera_erro(
   $$delete from public.trilha_auditoria$$, '42501', 'trilha não aceita exclusão');
+select pg_temp.espera_erro(
+  $$truncate public.trilha_auditoria$$, '42501', 'trilha não aceita truncate');
 commit;
 
 -- Mesmo o dono das tabelas é barrado pelo gatilho da trilha.

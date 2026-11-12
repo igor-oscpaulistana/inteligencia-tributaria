@@ -23,4 +23,8 @@ language sql stable
 as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 
 grant usage on schema auth, public to anon, authenticated, service_role;
+-- Como no Supabase: toda tabela nova do schema public nasce com ALL para os três
+-- papéis. Sem isto, o teste não percebe uma permissão que a migração esqueceu
+-- de retirar.
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;

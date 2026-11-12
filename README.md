@@ -106,7 +106,9 @@ O modelo recebe os achados já calculados em código e devolve um resumo e uma e
 
 ## Escritório virtual
 
-A sala é uma cena isométrica em blocos desenhada em SVG pelo próprio código (`src/components/CenaEscritorio.tsx`), sem serviço externo. Cada personagem reflete o estado registrado da sua estação: ocioso, trabalhando (digita, com barras na tela), concluído, falhou e aguardando aprovação (cadeado). As animações respeitam a preferência do sistema por movimento reduzido.
+A sala é uma cena isométrica em blocos desenhada em SVG pelo próprio código (`src/components/CenaEscritorio.tsx`), sem serviço externo. Cada personagem reflete o estado registrado da sua estação: ocioso, trabalhando (digita, com barras na tela), concluído, falhou e aguardando aprovação (cadeado).
+
+Quem não está trabalhando circula pela sala (janela, bebedouro, quadro, estante, mesa dos colegas) e volta para a mesa quando a própria etapa entra em andamento. A circulação é só aparência: o estado de cada estação continua vindo do registro da execução. Com a preferência do sistema por movimento reduzido, todos permanecem sentados e sem animação.
 
 O desenho é decorativo para leitores de tela. Cada estação tem um botão sobreposto na cena, e a lista de estações abaixo dela e o painel de atividade dão o mesmo acesso por teclado.
 

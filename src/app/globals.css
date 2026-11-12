@@ -86,8 +86,19 @@ main { padding: 32px 0 48px; }
 .iso-estacao.trabalhando .iso-balao, .iso-estacao.concluido .iso-balao { animation: iso-flutuar 1.2s ease-in-out infinite alternate; }
 .iso-ponto { animation: iso-piscar 0.54s steps(2, jump-none) infinite alternate; }
 .iso-estacao.aguardando_aprovacao .iso-personagem { filter: saturate(0.4) brightness(0.82); }
+/* Personagem em pé: o deslocamento de cada trecho vai de (--x0, --y0) a (--x1, --y1). */
+.iso-andarilho { animation: iso-trajeto var(--dur) linear both; }
+.iso-perna-a, .iso-perna-b, .iso-braco-a, .iso-braco-b, .iso-corpo { transform-box: fill-box; }
+.iso-andarilho.andando .iso-corpo { animation: iso-balancar 0.3s steps(2, jump-none) infinite alternate; }
+.iso-andarilho.andando .iso-perna-a, .iso-andarilho.andando .iso-braco-b { animation: iso-passo 0.3s steps(2, jump-none) infinite alternate; }
+.iso-andarilho.andando .iso-perna-b, .iso-andarilho.andando .iso-braco-a { animation: iso-passo 0.3s steps(2, jump-none) infinite alternate-reverse; }
+.iso-andarilho:not(.andando) .iso-corpo { animation: iso-respirar 2.6s ease-in-out infinite alternate; }
+.iso-andarilho.aguardando_aprovacao .iso-corpo { filter: saturate(0.4) brightness(0.82); }
+.iso-andarilho .iso-balao { animation: iso-flutuar 1.2s ease-in-out infinite alternate; }
 .iso-estacao.aguardando_aprovacao .iso-led { opacity: 0.35; }
 .iso-estacao.falhou .iso-led { fill: #ff9d94; }
+@keyframes iso-trajeto { from { transform: translate(var(--x0), var(--y0)); } to { transform: translate(var(--x1), var(--y1)); } }
+@keyframes iso-passo { to { transform: translateY(-2.4px); } }
 @keyframes iso-respirar { to { transform: translateY(0.6px); } }
 @keyframes iso-balancar { to { transform: translateY(1.4px); } }
 @keyframes iso-digitar { to { transform: translateY(-1.6px); } }
@@ -95,7 +106,7 @@ main { padding: 32px 0 48px; }
 @keyframes iso-pulsar { to { fill-opacity: 0.34; } }
 @keyframes iso-flutuar { to { transform: translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) {
-  .iso-estacao *, .iso-ponto { animation: none !important; }
+  .iso-estacao *, .iso-ponto, .iso-andarilho * { animation: none !important; }
 }
 
 .station-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 14px 14px; }

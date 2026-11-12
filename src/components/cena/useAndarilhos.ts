@@ -8,17 +8,14 @@ import {
   entradaNaMesa,
   parada,
   PONTOS_DE_INTERESSE,
-  posicaoNoTrecho,
   rota,
   saidaDaMesa,
-  sobreAsLinhas,
   type Ponto,
   type Trecho,
 } from "./movimento";
 
 /** Unidades do piso por segundo. */
 const VELOCIDADE_PASSEIO = 1.5;
-const VELOCIDADE_DE_VOLTA = 4.5;
 
 /** O que desenhar para um personagem neste momento. */
 export type Quadro =
@@ -49,17 +46,15 @@ const entre = (minimo: number, maximo: number) => minimo + Math.random() * (maxi
 
 /**
  * Faz os personagens circularem pela sala enquanto a estação deles não está
- * trabalhando. Quando a etapa entra em andamento, o personagem volta para a
- * mesa. Com "movimento reduzido" ativado no sistema, todos ficam sentados.
+ * trabalhando. Quando a etapa entra em andamento, o personagem aparece sentado
+ * na mesa na mesma hora e fica lá até a etapa terminar. Com "movimento reduzido" ativado no sistema, todos ficam sentados.
  */
 export function useAndarilhos(visuais: Record<AgenteId, EstadoVisual>): Quadros {
   const [quadros, setQuadros] = useState<Quadros>(TODOS_SENTADOS);
   const visuaisAtuais = useRef(visuais);
   const controles = useRef<Record<AgenteId, Controle> | null>(null);
   const chave = useRef(0);
-  const acoes = useRef<{ voltar: (agente: AgenteId) => void; agendar: (agente: AgenteId) => void } | null>(
-    null,
-  );
+  const acoes = useRef<{ sentarAgora: (agente: AgenteId) => void } | null>(null);
 
   useEffect(() => {
     visuaisAtuais.current = visuais;
@@ -138,13 +133,7 @@ export function useAndarilhos(visuais: Record<AgenteId, EstadoVisual>): Quadros 
       const c = estado[agente];
       const indice = AGENTES.indexOf(agente);
       if (visuaisAtuais.current[agente] === "trabalhando") {
-        // Sentado, continua na mesa; em pé, volta para ela.
-        if (ponto) {
-          voltarDe(agente, ponto, VELOCIDADE_DE_VOLTA);
-          avancar(agente);
-        } else {
-          agendar(agente);
-        }
+        sentar(agente);
         return;
       }
 
@@ -180,31 +169,10 @@ export function useAndarilhos(visuais: Record<AgenteId, EstadoVisual>): Quadros 
       avancar(agente);
     }
 
-    /** Interrompe o passeio e traz o personagem de volta à mesa, andando mais rápido. */
-    function voltar(agente: AgenteId): void {
-      const c = estado[agente];
-      if (!c.atual || c.voltando) return;
+    /** Quem está trabalhando fica sentado: interrompe o passeio e põe o personagem na mesa na hora. */
+    function sentarAgora(agente: AgenteId): void {
       limpar(agente);
-      const { trecho, duracao, inicio } = c.atual;
-      const onde = posicaoNoTrecho(trecho, (performance.now() - inicio) / (duracao * 1000));
-      if (sobreAsLinhas(onde)) {
-        voltarDe(agente, onde, VELOCIDADE_DE_VOLTA);
-        avancar(agente);
-        return;
-      }
-      // Saindo da mesa: termina o trecho curto em que está e refaz o caminho até o assento.
-      const restante = Math.max(duracao * 1000 - (performance.now() - inicio), 0);
-      const indice = AGENTES.indexOf(agente);
-      c.fila = [];
-      c.temporizador = window.setTimeout(() => {
-        if (sobreAsLinhas(trecho.para)) {
-          voltarDe(agente, trecho.para, VELOCIDADE_DE_VOLTA);
-        } else {
-          c.voltando = true;
-          c.fila = comDuracao([entradaNaMesa(indice)[1]], VELOCIDADE_DE_VOLTA);
-        }
-        avancar(agente);
-      }, restante);
+      sentar(agente);
     }
 
     /** Depois de um tempo sentado, o personagem sai para circular. */
@@ -216,7 +184,7 @@ export function useAndarilhos(visuais: Record<AgenteId, EstadoVisual>): Quadros 
       }, espera * 1000);
     }
 
-    acoes.current = { voltar, agendar };
+    acoes.current = { sentarAgora };
     // Saídas escalonadas, para a sala ganhar movimento logo e não todos de uma vez.
     AGENTES.forEach((agente, i) => agendar(agente, 1.2 + i * 1.6 + Math.random()));
 
@@ -227,13 +195,11 @@ export function useAndarilhos(visuais: Record<AgenteId, EstadoVisual>): Quadros 
     };
   }, []);
 
-  // Quem entra em andamento volta para a mesa na hora.
+  // Quem entra em andamento senta na hora: agente trabalhando não fica em pé.
   const trabalhando = AGENTES.filter((a) => visuais[a] === "trabalhando").join(",");
   useEffect(() => {
     for (const agente of AGENTES) {
-      if (visuaisAtuais.current[agente] === "trabalhando" && controles.current?.[agente].atual) {
-        acoes.current?.voltar(agente);
-      }
+      if (visuaisAtuais.current[agente] === "trabalhando") acoes.current?.sentarAgora(agente);
     }
   }, [trabalhando]);
 

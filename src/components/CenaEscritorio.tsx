@@ -657,7 +657,7 @@ function areaDaEstacao(indice: number): CSSProperties {
 
 /**
  * Sala isométrica em blocos com as quatro estações. Quem não está trabalhando
- * circula pela sala e volta para a mesa quando a etapa entra em andamento. O
+ * circula pela sala; quem está trabalhando fica sentado na própria mesa. O
  * desenho é decorativo para leitores de tela; cada estação tem um botão
  * sobreposto, e a lista de estações logo abaixo da cena oferece o mesmo acesso.
  */
@@ -670,11 +670,14 @@ export function CenaEscritorio({ estacoes, selecionada, aoSelecionar }: Props) {
     retificacao: visualDe("retificacao"),
   });
 
+  /** Quem está trabalhando é sempre desenhado sentado, mesmo que o passeio ainda não tenha sido encerrado. */
+  const naMesa = (agente: AgenteId) => quadros[agente].sentado || visualDe(agente) === "trabalhando";
+
   /** Personagens em pé que pertencem a uma camada de desenho, do mais ao fundo para o mais à frente. */
   const emPe = (camada: Camada, somente?: AgenteId): ReactNode =>
     DEFINICOES_AGENTES.flatMap((definicao) => {
       const quadro = quadros[definicao.id];
-      if (quadro.sentado || quadro.trecho.camada !== camada) return [];
+      if (quadro.sentado || naMesa(definicao.id) || quadro.trecho.camada !== camada) return [];
       if (somente && definicao.id !== somente) return [];
       return [{ definicao, quadro, fundo: quadro.trecho.para[0] + quadro.trecho.para[1] }];
     })
@@ -715,7 +718,7 @@ export function CenaEscritorio({ estacoes, selecionada, aoSelecionar }: Props) {
                   definicao={definicao}
                   indice={indice}
                   visual={visual}
-                  ausente={!quadros[definicao.id].sentado}
+                  ausente={!naMesa(definicao.id)}
                 />
                 {emPe(`corredor:${indice}`)}
               </Fragment>

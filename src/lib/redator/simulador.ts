@@ -3,8 +3,7 @@ import type { PedidoDeRedacao, RedatorRelatorio, TextoRedigido } from "./tipos";
 
 /**
  * Redator simulado: monta o texto com modelos fixos, sem chamar nenhum serviço.
- * Serve para desenvolver e testar o fluxo do relatório enquanto o OAuth da
- * OpenAI não está ativo.
+ * Serve para desenvolver e testar o fluxo do relatório sem ANTHROPIC_API_KEY.
  */
 export class RedatorSimulado implements RedatorRelatorio {
   async redigir(pedido: PedidoDeRedacao): Promise<TextoRedigido> {
@@ -23,7 +22,7 @@ export class RedatorSimulado implements RedatorRelatorio {
             .join("; ") +
           ".",
       })),
-      origem: { provedor: "simulador", modelo: null },
+      origem: { provedor: "simulador", modelo: null, tokensEntrada: null, tokensSaida: null },
     };
   }
 }

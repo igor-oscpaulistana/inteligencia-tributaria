@@ -1,20 +1,11 @@
 /**
  * Tradução do estado registrado da execução para o que as estações mostram.
- * A cena 3D e a interface acessível usam exatamente esta mesma leitura.
+ * A cena do escritório e a lista de estações usam exatamente esta mesma leitura.
  */
 
 import { STATUS_ATIVOS, type AgenteId, type Etapa, type Execucao } from "./tipos";
 
 export type EstadoVisual = "ocioso" | "trabalhando" | "concluido" | "falhou" | "aguardando_aprovacao";
-
-/** Valor enviado às variáveis da cena do Spline. */
-export const CODIGO_ESTADO_VISUAL: Record<EstadoVisual, number> = {
-  ocioso: 0,
-  trabalhando: 1,
-  concluido: 2,
-  falhou: 3,
-  aguardando_aprovacao: 4,
-};
 
 export interface SituacaoEstacao {
   agente: AgenteId;

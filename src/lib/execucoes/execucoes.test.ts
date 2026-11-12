@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FonteFicticia } from "@/lib/arquivos/ficticia";
 import { ErroFonteArquivos, type FonteArquivos } from "@/lib/arquivos/tipos";
 import { lerConfiguracao } from "@/lib/config";
-import { CODIGO_ESTADO_VISUAL, execucaoAtiva, situacaoDasEstacoes } from "./apresentacao";
+import { execucaoAtiva, situacaoDasEstacoes } from "./apresentacao";
 import { processarExecucao } from "./executor";
 import { RepositorioMemoria } from "./repositorio-memoria";
 import type { Usuario } from "./tipos";
@@ -160,7 +160,7 @@ describe("estado das estações", () => {
       progressoAtual: 3,
       progressoTotal: 10,
     });
-    expect(CODIGO_ESTADO_VISUAL[andamento[3].visual]).toBe(4);
+    expect(andamento[3].visual).toBe("aguardando_aprovacao");
   });
 
   it("indica pendências e as próximas etapas depois da triagem", async () => {

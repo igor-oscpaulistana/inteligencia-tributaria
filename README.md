@@ -6,9 +6,9 @@ O projeto está sendo construído por etapas, começando por um piloto de um cli
 
 | Etapa | Entrega | Situação |
 | --- | --- | --- |
-| 1 | Seleção de cliente e competência, leitura do OneDrive, Triagem, escritório virtual | Implementada |
+| 1 | Seleção de cliente e competência, leitura do OneDrive, Triagem, escritório virtual, redator com Claude Opus | Implementada |
 | 2 | Auditoria: cruzamento XML × EFD-Contribuições × EFD ICMS/IPI e cálculo das diferenças | A fazer |
-| 3 | Relatório: valores, gráfico, memória de cálculo por NF-e e redação por modelo de linguagem | A fazer |
+| 3 | Relatório: valores, gráfico, memória de cálculo por NF-e e uso do redator | A fazer |
 | 4 | Aprovação humana e geração do TXT da EFD-Contribuições retificadora | A fazer |
 
 ## Como rodar
@@ -95,35 +95,28 @@ O passo 3 foi escrito sem acesso à documentação da Microsoft; confira o corpo
 
 O OneDrive real só é usado quando o Supabase também está configurado: sem autenticação o painel fica aberto e, por isso, só mostra dados fictícios.
 
-### Cena 3D (Spline)
+### Claude (API da Anthropic)
 
-Informe em `NEXT_PUBLIC_SPLINE_SCENE_URL` a URL do arquivo `.splinecode` exportado do Spline. A cena precisa seguir este contrato:
+A redação do relatório (etapa 3) usa o Claude Opus (`claude-opus-5-5`), no mesmo formato do HUB do Paralegal: SDK `@anthropic-ai/sdk`, `ANTHROPIC_API_KEY` no servidor, streaming e fallback do servidor em caso de recusa. O código está em `src/lib/redator/`.
 
-| Estação | Objeto clicável | Variável numérica |
-| --- | --- | --- |
-| Triagem | `Estacao_Triagem` | `estado_triagem` |
-| Auditoria | `Estacao_Auditoria` | `estado_auditoria` |
-| Relatório | `Estacao_Relatorio` | `estado_relatorio` |
-| Retificação | `Estacao_Retificacao` | `estado_retificacao` |
+O modelo recebe os achados já calculados em código e devolve um resumo e uma explicação por achado, em JSON com esquema. Ele não calcula nem altera valores; resposta que não cubra exatamente os achados enviados é rejeitada. Sem `ANTHROPIC_API_KEY`, entra um simulador que monta o texto com modelos fixos.
 
-Valores das variáveis: `0` ocioso, `1` trabalhando, `2` concluído, `3` falhou, `4` aguardando aprovação. Na cena, cada valor deve acionar o estado visual correspondente do personagem e da estação.
+## Escritório virtual
 
-Sem a URL, sem WebGL, com erro ou se a cena não carregar em 15 segundos, o painel mostra a imagem do escritório com um marcador por estação. A lista de estações abaixo da cena e o painel de atividade funcionam nos dois casos, por teclado e leitor de tela.
+A sala é uma cena isométrica em blocos desenhada em SVG pelo próprio código (`src/components/CenaEscritorio.tsx`), sem serviço externo. Cada personagem reflete o estado registrado da sua estação: ocioso, trabalhando (digita, com barras na tela), concluído, falhou e aguardando aprovação (cadeado). As animações respeitam a preferência do sistema por movimento reduzido.
 
-### OpenAI
-
-A redação do relatório (etapa 3) está isolada em `src/lib/redator/`: a interface `RedatorRelatorio` e um simulador. O conector real, com o OAuth da OpenAI no formato do Concilia AI, ainda não existe; a implementação de referência não estava acessível.
+O desenho é decorativo para leitores de tela. Cada estação tem um botão sobreposto na cena, e a lista de estações abaixo dela e o painel de atividade dão o mesmo acesso por teclado.
 
 ## Arquitetura
 
 ```text
 src/app/                  páginas e rotas de API (Next.js, App Router)
-src/components/           escritório virtual, cena Spline, diálogo e painel de triagem
+src/components/           escritório virtual, cena isométrica, diálogo e painel de triagem
 src/lib/agentes/          agente de Triagem e definição das quatro estações
 src/lib/arquivos/         origem dos arquivos: Microsoft Graph, dados fictícios, leiaute de pastas
 src/lib/fiscal/           leitura do cabeçalho do SPED e identificação dos XMLs
 src/lib/execucoes/        execuções, executor assíncrono, repositórios (Supabase e memória)
-src/lib/redator/          interface e simulador da redação por modelo de linguagem
+src/lib/redator/          redação do relatório: Claude Opus e simulador
 supabase/migrations/      tabelas, permissões e políticas de acesso
 supabase/testes/          testes das regras do banco
 ```

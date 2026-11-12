@@ -40,7 +40,6 @@ async function EscritorioDoUsuario() {
       execucaoInicial={ultima}
       ambiente={{
         fonte: config.fonte,
-        cenaSpline: process.env.NEXT_PUBLIC_SPLINE_SCENE_URL?.trim() || null,
         avisos: config.avisos,
       }}
       sair={config.supabase ? sair : undefined}

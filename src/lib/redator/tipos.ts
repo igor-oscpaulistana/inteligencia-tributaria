@@ -5,10 +5,8 @@
  * calculados em código. Ele não calcula, não altera valores e não decide o que
  * entra na retificação.
  *
- * A conexão prevista é o OAuth da OpenAI, no mesmo formato do Concilia AI. A
- * implementação de referência não estava acessível quando esta interface foi
- * escrita, então só existe o simulador; o conector real deve implementar
- * `RedatorRelatorio` sem mudar quem o chama.
+ * O redator real usa o Claude Opus pela API da Anthropic, no mesmo formato do
+ * HUB do Paralegal (ver ./claude.ts). Sem ANTHROPIC_API_KEY, entra o simulador.
  */
 
 export interface AchadoParaRedacao {
@@ -31,8 +29,13 @@ export interface PedidoDeRedacao {
 export interface TextoRedigido {
   resumo: string;
   explicacoes: Array<{ achadoId: string; texto: string }>;
-  /** Identifica quem redigiu, para a trilha de auditoria. */
-  origem: { provedor: "simulador" | "openai"; modelo: string | null };
+  /** Quem redigiu e quanto consumiu, para a trilha de auditoria. */
+  origem: {
+    provedor: "simulador" | "anthropic";
+    modelo: string | null;
+    tokensEntrada: number | null;
+    tokensSaida: number | null;
+  };
 }
 
 export interface RedatorRelatorio {

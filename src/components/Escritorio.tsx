@@ -12,7 +12,6 @@ import { PainelTriagem } from "./PainelTriagem";
 
 export interface AmbientePainel {
   fonte: TipoFonte;
-  cenaSpline: string | null;
   avisos: string[];
 }
 
@@ -162,7 +161,6 @@ export function Escritorio({ nomeUsuario, clientes, execucaoInicial, ambiente, s
               </span>
             </div>
             <CenaEscritorio
-              urlCena={ambiente.cenaSpline}
               estacoes={estacoes}
               selecionada={selecionada}
               aoSelecionar={setSelecionada}

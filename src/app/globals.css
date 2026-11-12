@@ -66,19 +66,36 @@ main { padding: 32px 0 48px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #7c92b2; flex: none; }
 .dot.live { background: #65e0af; box-shadow: 0 0 10px #65e0af88; }
 
-.scene { position: relative; aspect-ratio: 760 / 368; background: #0c1830; }
-.scene-art { display: block; width: 100%; height: 100%; object-fit: cover; }
-.scene-3d { position: absolute; inset: 0; }
-.scene-3d[data-ready="false"] { opacity: 0; }
-.scene-overlay { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, #102039 0%, transparent 22%); }
-.beacon { position: absolute; top: 70%; transform: translate(-50%, -50%); width: 34px; height: 34px; display: grid; place-items: center; pointer-events: auto; background: #132239dd; color: #fff; border: 1px solid var(--station-color); border-radius: 50%; font-size: 12px; font-weight: 750; box-shadow: 0 2px 9px #0e162e88; padding: 0; }
-.beacon[aria-pressed="true"] { box-shadow: 0 0 0 3px #d8eaff55; }
-.beacon.trabalhando { color: #101b2d; background: var(--station-color); animation: station-glow 1.15s infinite alternate; }
-.beacon.concluido { background: #0e3b2ddd; }
-.beacon.falhou { border-color: #ff9d94; background: #4a1512dd; }
-.beacon.aguardando_aprovacao { opacity: 0.6; }
-@keyframes station-glow { to { box-shadow: 0 0 0 8px #cce9ff40, 0 0 24px var(--station-color); } }
-@media (prefers-reduced-motion: reduce) { .beacon.trabalhando { animation: none; } }
+.scene { display: flex; justify-content: center; aspect-ratio: 3 / 2; background: radial-gradient(ellipse at 50% 38%, #1a2f55 0%, #0c1830 72%); }
+.scene-stage { position: relative; height: 100%; max-width: 100%; }
+.scene-stage svg { display: block; width: 100%; height: 100%; }
+.scene-hit { position: absolute; padding: 0; background: transparent; border: 0; border-radius: 10px; }
+
+/* Personagens e estações da cena isométrica */
+.iso-cabeca, .iso-braco-e, .iso-braco-d, .iso-balao { transform-box: fill-box; }
+.iso-estacao.ocioso .iso-cabeca { animation: iso-respirar 2.6s ease-in-out infinite alternate; }
+.iso-estacao.trabalhando .iso-cabeca { animation: iso-balancar 0.55s steps(2, jump-none) infinite alternate; }
+.iso-estacao.trabalhando .iso-braco-e { animation: iso-digitar 0.28s steps(2, jump-none) infinite alternate; }
+.iso-estacao.trabalhando .iso-braco-d { animation: iso-digitar 0.28s steps(2, jump-none) infinite alternate-reverse; }
+.iso-estacao.trabalhando .iso-barra { animation: iso-piscar 0.9s steps(2, jump-none) infinite alternate; }
+.iso-estacao.trabalhando .iso-barra:nth-of-type(2n) { animation-delay: 0.3s; }
+.iso-estacao.trabalhando .iso-barra:nth-of-type(3n) { animation-delay: 0.55s; }
+.iso-estacao.trabalhando .iso-led { animation: iso-piscar 0.7s ease-in-out infinite alternate; }
+.iso-estacao.trabalhando .iso-piso { animation: iso-pulsar 1.1s ease-in-out infinite alternate; }
+.iso-estacao.trabalhando .iso-balao, .iso-estacao.concluido .iso-balao { animation: iso-flutuar 1.2s ease-in-out infinite alternate; }
+.iso-ponto { animation: iso-piscar 0.54s steps(2, jump-none) infinite alternate; }
+.iso-estacao.aguardando_aprovacao .iso-personagem { filter: saturate(0.4) brightness(0.82); }
+.iso-estacao.aguardando_aprovacao .iso-led { opacity: 0.35; }
+.iso-estacao.falhou .iso-led { fill: #ff9d94; }
+@keyframes iso-respirar { to { transform: translateY(0.6px); } }
+@keyframes iso-balancar { to { transform: translateY(1.4px); } }
+@keyframes iso-digitar { to { transform: translateY(-1.6px); } }
+@keyframes iso-piscar { to { opacity: 0.25; } }
+@keyframes iso-pulsar { to { fill-opacity: 0.34; } }
+@keyframes iso-flutuar { to { transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) {
+  .iso-estacao *, .iso-ponto { animation: none !important; }
+}
 
 .station-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 14px 14px; }
 .station { text-align: left; display: flex; gap: 8px; align-items: center; min-width: 0; background: #172d4c; border-color: #2e4567; color: #e8f0ff; padding: 8px 9px; font-size: 12px; }
@@ -175,7 +192,6 @@ dialog::backdrop { background: #10203995; }
 }
 @media (max-width: 560px) {
   .review { flex-direction: column; align-items: flex-start; }
-  .beacon { width: 27px; height: 27px; }
 }
 @media (max-width: 480px) {
   main, .top-inner { width: calc(100% - 24px); }

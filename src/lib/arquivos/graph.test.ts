@@ -133,6 +133,24 @@ describe("FonteGraph", () => {
     ).rejects.toMatchObject({ codigo: "credenciais" });
   });
 
+  it("explica a recusa do Entra ID pelo código, sem expor a credencial", async () => {
+    const recusa = async (codigos: number[] | undefined) => {
+      const { fetchSimulado } = simularFetch({
+        [TOKEN]: [{ status: 401, corpo: { error: "invalid_client", error_codes: codigos } }],
+      });
+      return new FonteGraph(config, { fetch: fetchSimulado }).listarRaiz().catch((erro: Error) => erro.message);
+    };
+    expect(await recusa([7000215])).toMatch(/campo Valor do segredo, e não o ID do segredo/);
+    expect(await recusa([7000222])).toMatch(/expirou/);
+    expect(await recusa([700016])).toMatch(/não encontrou o aplicativo/);
+    expect(await recusa([90002])).toMatch(/não encontrou o locatário/);
+    expect(await recusa([50000])).toMatch(/AADSTS50000/);
+    expect(await recusa(undefined)).toMatch(/Confira tenant, client ID e segredo/);
+    for (const mensagem of [await recusa([7000215]), await recusa([50000])]) {
+      expect(mensagem).not.toContain("segredo-teste");
+    }
+  });
+
   it("não envia o token para endereço fora do Graph", async () => {
     const { fetchSimulado, chamadas } = simularFetch({
       [TOKEN]: [token("t1")],

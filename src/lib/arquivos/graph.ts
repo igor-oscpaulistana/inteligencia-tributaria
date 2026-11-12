@@ -124,11 +124,10 @@ export class FonteGraph implements FonteArquivos {
       },
     );
     if (!resposta.ok) {
-      throw new ErroFonteArquivos(
-        "O Entra ID recusou as credenciais do aplicativo. Confira tenant, client ID e segredo.",
-        "credenciais",
-        resposta.status,
-      );
+      const recusa = (await resposta.json().catch(() => null)) as { error_codes?: number[] } | null;
+      const codigo = recusa?.error_codes?.[0];
+      console.error(`[onedrive] Entra ID recusou o token (HTTP ${resposta.status}, AADSTS${codigo ?? "?"})`);
+      throw new ErroFonteArquivos(mensagemDeRecusa(codigo), "credenciais", resposta.status);
     }
     const corpo = (await resposta.json()) as { access_token: string; expires_in: number };
     this.token = { valor: corpo.access_token, expiraEm: Date.now() + corpo.expires_in * 1000 };
@@ -169,6 +168,22 @@ export class FonteGraph implements FonteArquivos {
       }
       throw erroDoGraph(resposta.status);
     }
+  }
+}
+
+/** Explica a recusa do Entra ID pelo código AADSTS, sem expor nenhum dado da credencial. */
+function mensagemDeRecusa(codigo: number | undefined): string {
+  switch (codigo) {
+    case 7000215:
+      return "O Entra ID recusou o segredo do aplicativo. Confira se MS_CLIENT_SECRET tem o campo Valor do segredo, e não o ID do segredo.";
+    case 7000222:
+      return "O segredo do aplicativo no Entra ID expirou. Gere um novo segredo e atualize MS_CLIENT_SECRET.";
+    case 700016:
+      return "O Entra ID não encontrou o aplicativo neste locatário. Confira MS_CLIENT_ID e MS_TENANT_ID.";
+    case 90002:
+      return "O Entra ID não encontrou o locatário. Confira MS_TENANT_ID.";
+    default:
+      return `O Entra ID recusou as credenciais do aplicativo${codigo ? ` (AADSTS${codigo})` : ""}. Confira tenant, client ID e segredo.`;
   }
 }
 

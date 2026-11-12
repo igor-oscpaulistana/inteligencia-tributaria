@@ -78,7 +78,7 @@ const LINHAS: Linha[] = [
 ];
 
 export const PONTOS_DE_INTERESSE: PontoDeInteresse[] = [
-  { id: "janela-1", ponto: [2.2, Y_FUNDO], direcao: "-y" },
+  { id: "marcas", ponto: [2.2, Y_FUNDO], direcao: "-y" },
   { id: "janela-2", ponto: [5.0, Y_FUNDO], direcao: "-y" },
   { id: "janela-3", ponto: [7.6, Y_FUNDO], direcao: "-y" },
   { id: "janela-4", ponto: [10.2, Y_FUNDO], direcao: "-y" },

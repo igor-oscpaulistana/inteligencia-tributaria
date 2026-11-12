@@ -37,7 +37,12 @@ export function tom(cor: string, fator: number): string {
   return `#${canais.join("")}`;
 }
 
-const CONTORNO = { stroke: "#0a1224", strokeOpacity: 0.55, strokeWidth: 0.7, strokeLinejoin: "round" } as const;
+const CONTORNO = {
+  stroke: "#0a1224",
+  strokeOpacity: 0.55,
+  strokeWidth: 0.7,
+  strokeLinejoin: "round",
+} as const;
 
 interface PropsCaixa {
   /** Canto de menor x, y e z. */
@@ -146,5 +151,32 @@ export function FaceZ({
       {...(contorno ? CONTORNO : {})}
       {...(bordaCor ? { stroke: bordaCor, strokeWidth: 1.6, strokeLinejoin: "round" as const } : {})}
     />
+  );
+}
+
+/**
+ * Imagem aplicada sobre a parede do fundo (plano y = 0), acompanhando a
+ * perspectiva da parede. `x` e `zTopo` posicionam o canto superior esquerdo.
+ */
+export function ImagemNoFundo({
+  href,
+  x,
+  zTopo,
+  largura,
+  altura,
+}: {
+  href: string;
+  x: number;
+  zTopo: number;
+  largura: number;
+  altura: number;
+}) {
+  const [ox, oy] = ponto(x, 0, zTopo);
+  // Uma unidade ao longo da parede anda (ESCALA, ESCALA / 2) na tela; uma unidade para baixo, (0, ESCALA).
+  const matriz = [largura * ESCALA, (largura * ESCALA) / 2, 0, altura * ESCALA, ox, oy]
+    .map((valor) => valor.toFixed(2))
+    .join(" ");
+  return (
+    <image href={href} width={1} height={1} preserveAspectRatio="none" transform={`matrix(${matriz})`} />
   );
 }

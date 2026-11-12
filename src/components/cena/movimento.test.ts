@@ -45,9 +45,9 @@ describe("circulação pela sala", () => {
   });
 
   it("escolhe o caminho mais curto e a camada de cada linha", () => {
-    // Da mesa 1 até a janela mais próxima: sobe a coluna da mesa e segue pelo corredor do fundo.
-    const janela = PONTOS_DE_INTERESSE.find((p) => p.id === "janela-1")!;
-    const caminho = rota(acessoDaMesa(0), janela.ponto);
+    // Da mesa 1 até o painel das marcas: sobe a coluna da mesa e segue pelo corredor do fundo.
+    const painel = PONTOS_DE_INTERESSE.find((p) => p.id === "marcas")!;
+    const caminho = rota(acessoDaMesa(0), painel.ponto);
     expect(caminho.map((t) => [t.camada, t.direcao])).toEqual([
       ["corredor:0", "-y"],
       ["fundo", "-x"],

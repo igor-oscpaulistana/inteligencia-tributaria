@@ -68,6 +68,7 @@ main { padding: 32px 0 48px; }
 .dot.live { background: #65e0af; box-shadow: 0 0 10px #65e0af88; }
 
 .scene { display: flex; justify-content: center; aspect-ratio: 3 / 2; background: radial-gradient(ellipse at 50% 38%, #1a2f55 0%, #0c1830 72%); }
+.scene[data-periodo="dia"] { background: radial-gradient(ellipse at 50% 38%, #2c4f85 0%, #142a4e 72%); }
 .scene-stage { position: relative; height: 100%; max-width: 100%; }
 .scene-stage svg { display: block; width: 100%; height: 100%; }
 .scene-hit { position: absolute; padding: 0; background: transparent; border: 0; border-radius: 10px; }

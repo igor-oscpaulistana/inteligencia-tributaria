@@ -4,9 +4,11 @@ import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { DEFINICOES_AGENTES, type DefinicaoAgente } from "@/lib/agentes/definicoes";
 import type { EstadoVisual, SituacaoEstacao } from "@/lib/execucoes/apresentacao";
 import type { AgenteId } from "@/lib/execucoes/tipos";
-import { Caixa, FaceX, FaceY, FaceZ, linha, ponto, tom, type Vetor } from "./cena/iso";
+import { ceuDaHora, type Ceu } from "./cena/ceu";
+import { Caixa, FaceX, FaceY, FaceZ, ImagemNoFundo, linha, ponto, tom, type Vetor } from "./cena/iso";
 import { origemDaEstacao, type Camada } from "./cena/movimento";
 import { useAndarilhos, type Quadro } from "./cena/useAndarilhos";
+import { useHoraLocal } from "./cena/useHoraLocal";
 
 interface Props {
   estacoes: SituacaoEstacao[];
@@ -515,51 +517,76 @@ function Andarilho({
   );
 }
 
-/** Janela da parede do fundo, com a cidade à noite. */
-function Janela() {
+/** Janela da parede do fundo. O céu acompanha a hora local: sol de dia, lua à noite. */
+function Janela({ ceu }: { ceu: Ceu }) {
   const predios = [
-    { x: [1.3, 2.0], h: 0.9 },
-    { x: [2.1, 2.7], h: 1.4 },
-    { x: [2.9, 3.5], h: 0.7 },
-    { x: [3.9, 4.8], h: 1.25 },
-    { x: [5.0, 5.5], h: 0.85 },
-    { x: [5.6, 6.1], h: 1.55 },
-    { x: [6.5, 7.4], h: 1.0 },
-    { x: [7.6, 8.1], h: 1.35 },
-    { x: [8.9, 9.6], h: 0.75 },
-    { x: [9.8, 10.4], h: 1.15 },
-    { x: [10.5, 11.2], h: 0.6 },
+    { x: [4.5, 5.1], h: 0.9 },
+    { x: [5.2, 5.8], h: 1.1 },
+    { x: [6.0, 6.5], h: 0.7 },
+    { x: [6.8, 7.6], h: 1.05 },
+    { x: [7.7, 8.2], h: 0.85 },
+    { x: [8.3, 8.8], h: 1.1 },
+    { x: [9.1, 9.8], h: 1.0 },
+    { x: [9.9, 10.4], h: 0.95 },
+    { x: [10.5, 11.2], h: 0.65 },
   ] as const;
   const base = 1.35;
-  const [lx, ly] = ponto(9.3, 0, 2.62);
+  const topo = 2.9;
+  const [esquerda, direita] = [4.4, 11.3];
+  // O astro cruza a janela da esquerda para a direita: nasce e se põe atrás dos prédios e passa acima deles.
+  const [ax, ay] = ponto(
+    esquerda + 0.5 + ceu.astro.horizontal * (direita - esquerda - 1),
+    0,
+    2.05 + ceu.astro.altura * 0.65,
+  );
+  const dia = ceu.periodo === "dia";
+
   return (
     <g>
-      <FaceY y={0} x={[1.0, 11.4]} z={[1.25, 3.0]} cor="#c7d3e8" contorno />
-      <FaceY y={0} x={[1.1, 11.3]} z={[base, 2.9]} cor="#0e1b3d" />
-      <FaceY y={0} x={[1.1, 11.3]} z={[base, 2.0]} cor="#16285a" opacidade={0.55} />
-      <circle cx={lx} cy={ly} r={6.5} fill="#f6f0c8" />
-      {[
-        [1.8, 2.7],
-        [3.3, 2.78],
-        [4.6, 2.55],
-        [6.9, 2.75],
-        [8.3, 2.5],
-        [10.6, 2.62],
-      ].map(([x, z]) => (
-        <FaceY key={`${x}-${z}`} y={0} x={[x, x + 0.05]} z={[z, z + 0.05]} cor="#dfe8ff" />
-      ))}
+      <FaceY y={0} x={[esquerda - 0.1, direita + 0.1]} z={[base - 0.1, topo + 0.1]} cor="#c7d3e8" contorno />
+      <FaceY y={0} x={[esquerda, direita]} z={[base, topo]} cor={ceu.cores.alto} />
+      <FaceY
+        y={0}
+        x={[esquerda, direita]}
+        z={[base, 2.0]}
+        cor={ceu.cores.baixo}
+        opacidade={dia ? 0.9 : 0.55}
+      />
+      {dia ? (
+        <>
+          <circle cx={ax} cy={ay} r={11} fill="#ffe27a" opacity={0.35} />
+          <circle cx={ax} cy={ay} r={6.5} fill={ceu.crepusculo ? "#ffb347" : "#ffd84d"} />
+        </>
+      ) : (
+        <>
+          <circle cx={ax} cy={ay} r={6.5} fill="#f6f0c8" />
+          <circle cx={ax + 2.6} cy={ay - 1.6} r={5.4} fill={ceu.cores.alto} />
+        </>
+      )}
+      {ceu.estrelas &&
+        [
+          [5.0, 2.7],
+          [6.3, 2.78],
+          [7.4, 2.55],
+          [8.9, 2.75],
+          [9.6, 2.5],
+          [10.9, 2.62],
+        ].map(([x, z]) => (
+          <FaceY key={`${x}-${z}`} y={0} x={[x, x + 0.05]} z={[z, z + 0.05]} cor="#dfe8ff" />
+        ))}
       {predios.map((predio, i) => (
         <g key={predio.x[0]}>
-          <FaceY y={0} x={predio.x} z={[base, base + predio.h]} cor={i % 2 ? "#1d315f" : "#182a52"} />
+          <FaceY y={0} x={predio.x} z={[base, base + predio.h]} cor={ceu.cores.predios[i % 2]} />
           {Array.from({ length: Math.floor(predio.h / 0.22) }, (_, andar) =>
             [0.12, 0.34].map((dx) =>
-              (andar * 3 + i + Math.round(dx * 10)) % 3 === 0 ? null : (
+              // À noite só parte das janelas está acesa; de dia todas aparecem, como vidro.
+              ceu.luzesAcesas && (andar * 3 + i + Math.round(dx * 10)) % 3 === 0 ? null : (
                 <FaceY
                   key={`${andar}-${dx}`}
                   y={0}
                   x={[predio.x[0] + dx, predio.x[0] + dx + 0.1]}
                   z={[base + 0.1 + andar * 0.22, base + 0.19 + andar * 0.22]}
-                  cor="#ffd98a"
+                  cor={ceu.cores.janelas}
                   opacidade={0.9}
                 />
               ),
@@ -567,14 +594,40 @@ function Janela() {
           )}
         </g>
       ))}
-      {[3.65, 6.2, 8.75].map((x) => (
-        <FaceY key={x} y={0} x={[x, x + 0.1]} z={[base, 2.9]} cor="#c7d3e8" />
+      {[6.62, 9.0].map((x) => (
+        <FaceY key={x} y={0} x={[x, x + 0.1]} z={[base, topo]} cor="#c7d3e8" />
       ))}
     </g>
   );
 }
 
-function Sala() {
+/** Painel das marcas na parede do fundo, ao lado da janela. */
+function PainelDeMarcas() {
+  const largura = 3.2;
+  return (
+    <g>
+      <FaceY y={0} x={[0.42, 4.02]} z={[1.38, 3.02]} cor="#d5dce8" contorno />
+      <FaceY y={0} x={[0.47, 3.97]} z={[1.43, 2.97]} cor="#ffffff" />
+      <ImagemNoFundo
+        href="/marcas/souza-cardoso.png"
+        x={0.62}
+        zTopo={2.86}
+        largura={largura}
+        altura={largura / 5.056}
+      />
+      <FaceY y={0} x={[0.8, 3.64]} z={[2.135, 2.15]} cor="#d5dce8" />
+      <ImagemNoFundo
+        href="/marcas/paulistana.png"
+        x={0.62}
+        zTopo={2.05}
+        largura={largura}
+        altura={largura / 5.844}
+      />
+    </g>
+  );
+}
+
+function Sala({ ceu }: { ceu: Ceu }) {
   const pisos = [];
   for (let i = 0; i < SALA.x; i++) {
     for (let j = 0; j < SALA.y; j++) {
@@ -597,7 +650,8 @@ function Sala() {
       <FaceX x={0} y={[0, SALA.y]} z={[0, SALA.h]} cor="#2f4875" contorno />
       <FaceY y={0} x={[0, SALA.x]} z={[0, 0.22]} cor="#24385f" />
       <FaceX x={0} y={[0, SALA.y]} z={[0, 0.22]} cor="#1e3054" />
-      <Janela />
+      <Janela ceu={ceu} />
+      <PainelDeMarcas />
 
       {/* Quadro de etapas na parede da esquerda */}
       <FaceX x={0} y={[1.0, 3.1]} z={[1.4, 2.85]} cor="#8b5a3c" contorno />
@@ -670,6 +724,10 @@ export function CenaEscritorio({ estacoes, selecionada, aoSelecionar }: Props) {
     retificacao: visualDe("retificacao"),
   });
 
+  // Antes de o navegador informar a hora local, a cena abre como noite.
+  const hora = useHoraLocal();
+  const ceu = ceuDaHora(hora ?? 0);
+
   /** Quem está trabalhando é sempre desenhado sentado, mesmo que o passeio ainda não tenha sido encerrado. */
   const naMesa = (agente: AgenteId) => quadros[agente].sentado || visualDe(agente) === "trabalhando";
 
@@ -693,14 +751,14 @@ export function CenaEscritorio({ estacoes, selecionada, aoSelecionar }: Props) {
       ));
 
   return (
-    <div className="scene">
+    <div className="scene" data-periodo={hora === null ? "noite" : ceu.periodo}>
       <div className="scene-stage" style={{ aspectRatio: `${VISTA.largura} / ${VISTA.altura}` }}>
         <svg
           viewBox={`${VISTA.x} ${VISTA.y} ${VISTA.largura} ${VISTA.altura}`}
           aria-hidden="true"
           focusable="false"
         >
-          <Sala />
+          <Sala ceu={ceu} />
           {emPe("fundo")}
           {emPe("corredor:-1")}
           {DEFINICOES_AGENTES.map((definicao, indice) => {

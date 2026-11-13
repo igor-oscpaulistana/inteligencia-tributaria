@@ -3,7 +3,7 @@
  * A cena do escritório e a lista de estações usam exatamente esta mesma leitura.
  */
 
-import { STATUS_ATIVOS, type AgenteId, type Etapa, type Execucao } from "./tipos";
+import { STATUS_ATIVOS, type AgenteId, type Etapa, type Execucao, type StatusExecucao } from "./tipos";
 
 export type EstadoVisual = "ocioso" | "trabalhando" | "concluido" | "falhou" | "aguardando_aprovacao";
 
@@ -99,3 +99,12 @@ export function resumoDaExecucao(execucao: Execucao | null): string {
       return "A triagem falhou";
   }
 }
+
+/** Situação da auditoria como aparece nas listas. Hoje ela vai até a Triagem. */
+export const SITUACAO_DA_AUDITORIA: Record<StatusExecucao, { rotulo: string; tom: "neutro" | "ativo" | "ok" | "alerta" | "erro" }> = {
+  na_fila: { rotulo: "Na fila", tom: "neutro" },
+  em_andamento: { rotulo: "Em andamento", tom: "ativo" },
+  triagem_concluida: { rotulo: "Triagem concluída", tom: "ok" },
+  triagem_com_pendencias: { rotulo: "Triagem com pendências", tom: "alerta" },
+  falhou: { rotulo: "Falhou", tom: "erro" },
+};

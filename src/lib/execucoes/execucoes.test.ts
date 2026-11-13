@@ -4,19 +4,40 @@ import { ErroFonteArquivos, type FonteArquivos } from "@/lib/arquivos/tipos";
 import { lerConfiguracao } from "@/lib/config";
 import { execucaoAtiva, situacaoDasEstacoes } from "./apresentacao";
 import { validarNovaSenha } from "@/lib/auth/senha";
+import { competenciasDoPeriodo, formatarPeriodo } from "@/lib/competencia";
 import { processarExecucao } from "./executor";
+import { processarFila } from "./fila";
 import { RepositorioMemoria } from "./repositorio-memoria";
-import type { Usuario } from "./tipos";
+import type { Lote, Usuario } from "./tipos";
 
 const usuario: Usuario = { id: "u1", nome: "Analista Teste", email: null };
 
 const PASTAS = ["Comercial Horizonte", "Distribuidora Aurora"];
 
+/** Lote de uma competência só: o pedido de um único mês. */
+const loteDe = (competencia: string, id = `lote-${competencia}`): Lote => ({
+  id,
+  periodoInicio: competencia,
+  periodoFim: competencia,
+});
+
 async function criar(repositorio: RepositorioMemoria, indiceCliente: number, competencia: string) {
   const cliente = await repositorio.registrarCliente(usuario, PASTAS[indiceCliente]);
-  const criacao = await repositorio.criarExecucao(usuario, cliente, competencia, "ficticia");
+  const criacao = await repositorio.criarExecucao(usuario, cliente, competencia, "ficticia", loteDe(competencia));
   if (criacao.tipo !== "criada") throw new Error("execução não criada");
   return criacao.execucao;
+}
+
+/** Pede um período: uma execução por competência, todas no mesmo lote. */
+async function criarPeriodo(repositorio: RepositorioMemoria, indiceCliente: number, inicio: string, fim: string) {
+  const cliente = await repositorio.registrarCliente(usuario, PASTAS[indiceCliente]);
+  const lote: Lote = { id: `lote-${indiceCliente}-${inicio}-${fim}`, periodoInicio: inicio, periodoFim: fim };
+  const criadas = [];
+  for (const competencia of competenciasDoPeriodo(inicio, fim)) {
+    const criacao = await repositorio.criarExecucao(usuario, cliente, competencia, "ficticia", lote);
+    if (criacao.tipo === "criada") criadas.push(criacao.execucao);
+  }
+  return { cliente, lote, criadas };
 }
 
 describe("executor", () => {
@@ -124,26 +145,94 @@ describe("repositório em memória", () => {
     const repositorio = new RepositorioMemoria();
     const primeira = await criar(repositorio, 0, "2026-05");
     const cliente = await repositorio.registrarCliente(usuario, PASTAS[0]);
-    expect(await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia")).toEqual({
+    expect(await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia", loteDe("2026-05", "b"))).toEqual({
       tipo: "conflito",
       execucaoId: primeira.id,
     });
     // Outra competência do mesmo cliente não conflita.
-    expect((await repositorio.criarExecucao(usuario, cliente, "2026-04", "ficticia")).tipo).toBe("criada");
+    expect((await repositorio.criarExecucao(usuario, cliente, "2026-04", "ficticia", loteDe("2026-04"))).tipo).toBe(
+      "criada",
+    );
 
     await processarExecucao(primeira.id, { repositorio, fonte: new FonteFicticia() });
-    expect((await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia")).tipo).toBe("criada");
+    expect((await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia", loteDe("2026-05", "c"))).tipo).toBe(
+      "criada",
+    );
   });
 
-  it("libera a competência quando a execução anterior ficou sem sinal de vida", async () => {
+  it("encerra a execução em andamento sem sinal de vida e libera a competência", async () => {
     let agora = new Date("2026-07-01T10:00:00Z");
     const repositorio = new RepositorioMemoria(() => agora);
     const travada = await criar(repositorio, 0, "2026-05");
+    const naFila = await criar(repositorio, 0, "2026-04");
     const cliente = await repositorio.registrarCliente(usuario, PASTAS[0]);
+    expect(await repositorio.sistemaReivindicar(travada.id)).toBe(true);
+    await repositorio.sistemaAtualizarEtapa(travada.id, "triagem", { estado: "em_andamento" });
 
-    agora = new Date("2026-07-01T10:16:00Z");
-    expect((await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia")).tipo).toBe("criada");
-    expect((await repositorio.obterExecucao(usuario, travada.id))!.status).toBe("falhou");
+    // Dentro do prazo, nada muda.
+    agora = new Date("2026-07-01T10:05:00Z");
+    expect(await repositorio.sistemaEncerrarInterrompidas()).toBe(0);
+
+    agora = new Date("2026-07-01T10:07:00Z");
+    expect(await repositorio.sistemaEncerrarInterrompidas()).toBe(1);
+    const encerrada = (await repositorio.obterExecucao(usuario, travada.id))!;
+    expect(encerrada.status).toBe("falhou");
+    expect(encerrada.erro).toMatch(/interrompida/);
+    expect(encerrada.etapas.find((e) => e.agente === "triagem")!.estado).toBe("falhou");
+    // Quem espera na fila não é encerrado por estar parado: só o que estava em andamento.
+    expect((await repositorio.obterExecucao(usuario, naFila.id))!.status).toBe("na_fila");
+    expect((await repositorio.criarExecucao(usuario, cliente, "2026-05", "ficticia", loteDe("2026-05", "d"))).tipo).toBe(
+      "criada",
+    );
+  });
+
+  it("só um processo consegue assumir a execução", async () => {
+    const repositorio = new RepositorioMemoria();
+    const criada = await criar(repositorio, 0, "2026-05");
+    expect(await repositorio.sistemaReivindicar(criada.id)).toBe(true);
+    expect(await repositorio.sistemaReivindicar(criada.id)).toBe(false);
+    expect(await repositorio.sistemaReivindicar("inexistente")).toBe(false);
+  });
+
+  it("lista a execução mais recente de cada cliente e competência", async () => {
+    const repositorio = new RepositorioMemoria();
+    const antiga = await criar(repositorio, 0, "2026-05");
+    await processarExecucao(antiga.id, { repositorio, fonte: new FonteFicticia() });
+    const nova = await criar(repositorio, 0, "2026-05");
+    await criar(repositorio, 0, "2026-06");
+    const outroCliente = await criar(repositorio, 1, "2026-05");
+
+    const todas = await repositorio.listarAuditorias(usuario);
+    // Cliente em ordem alfabética; dentro dele, a competência mais recente primeiro.
+    expect(todas.map((a) => `${a.clienteNome} ${a.competencia}`)).toEqual([
+      "Comercial Horizonte 2026-06",
+      "Comercial Horizonte 2026-05",
+      "Distribuidora Aurora 2026-05",
+    ]);
+    // A competência reauditada mostra a execução nova, não a antiga.
+    expect(todas[1].id).toBe(nova.id);
+    expect(todas[1].notasSaida).toBeNull();
+
+    const doCliente = await repositorio.listarAuditorias(usuario, { clienteId: outroCliente.clienteId });
+    expect(doCliente.map((a) => a.id)).toEqual([outroCliente.id]);
+    expect(await repositorio.obterCliente(usuario, outroCliente.clienteId)).toMatchObject({
+      nome: "Distribuidora Aurora",
+    });
+    expect(await repositorio.obterCliente(usuario, "inexistente")).toBeNull();
+  });
+
+  it("resume a triagem concluída com notas de saída e pendências", async () => {
+    const repositorio = new RepositorioMemoria();
+    const criada = await criar(repositorio, 0, "2026-05");
+    await processarExecucao(criada.id, { repositorio, fonte: new FonteFicticia() });
+    const [resumo] = await repositorio.listarAuditorias(usuario);
+    const completa = (await repositorio.obterExecucao(usuario, criada.id))!;
+    expect(resumo.status).toBe("triagem_concluida");
+    expect(resumo.notasSaida).toBe(completa.triagem!.xml.saidas);
+    expect(resumo.pendenciasImpeditivas).toBe(0);
+    expect(resumo.pendenciasAlerta).toBe(
+      completa.triagem!.pendencias.filter((p) => p.gravidade === "alerta").length,
+    );
   });
 
   it("não deixa a Retificação sair de aguardando aprovação", async () => {
@@ -152,6 +241,92 @@ describe("repositório em memória", () => {
     await expect(
       repositorio.sistemaAtualizarEtapa(criada.id, "retificacao", { estado: "em_andamento" }),
     ).rejects.toThrow(/aprovação humana/);
+  });
+});
+
+describe("auditoria por período", () => {
+  it("lista as competências de um período, inclusive na virada do ano", () => {
+    expect(competenciasDoPeriodo("2023-01", "2023-12")).toHaveLength(12);
+    expect(competenciasDoPeriodo("2023-11", "2024-02")).toEqual(["2023-11", "2023-12", "2024-01", "2024-02"]);
+    expect(competenciasDoPeriodo("2023-05", "2023-05")).toEqual(["2023-05"]);
+    expect(competenciasDoPeriodo("2023-06", "2023-05")).toEqual([]);
+    expect(competenciasDoPeriodo("2023-13", "2023-14")).toEqual([]);
+    expect(formatarPeriodo("2023-01", "2023-12")).toBe("01/2023 a 12/2023");
+    expect(formatarPeriodo("2023-05", "2023-05")).toBe("05/2023");
+  });
+
+  it("cria uma execução por competência no mesmo lote e processa a fila em ordem", async () => {
+    const repositorio = new RepositorioMemoria();
+    const { lote, criadas } = await criarPeriodo(repositorio, 0, "2026-04", "2026-06");
+    expect(criadas.map((e) => e.competencia)).toEqual(["2026-04", "2026-05", "2026-06"]);
+    expect(new Set(criadas.map((e) => e.loteId))).toEqual(new Set([lote.id]));
+    expect(criadas[1]).toMatchObject({ periodoInicio: "2026-04", periodoFim: "2026-06", status: "na_fila" });
+    expect(await repositorio.situacaoDaFila()).toEqual({ naFila: 3, emAndamento: 0 });
+    // Com fila e nada em andamento, o escritório mostra a próxima da fila.
+    expect((await repositorio.execucaoEmFoco())!.id).toBe(criadas[0].id);
+
+    const resultado = await processarFila({ repositorio, criarFonte: () => new FonteFicticia() });
+    expect(resultado).toEqual({ processadas: 3, restam: false });
+    expect(await repositorio.situacaoDaFila()).toEqual({ naFila: 0, emAndamento: 0 });
+
+    const iniciadas = repositorio.eventos.filter((e) => e.acao === "triagem.iniciada").map((e) => e.execucaoId);
+    expect(iniciadas).toEqual(criadas.map((e) => e.id));
+    // Cada mês tem a sua conferência e a sua Retificação, bloqueada até a aprovação.
+    for (const criada of criadas) {
+      const final = (await repositorio.obterExecucao(usuario, criada.id))!;
+      expect(["triagem_concluida", "triagem_com_pendencias"]).toContain(final.status);
+      expect(final.etapas.find((e) => e.agente === "retificacao")!.estado).toBe("aguardando_aprovacao");
+    }
+  });
+
+  it("para quando o tempo útil acaba e deixa o restante na fila", async () => {
+    let agora = new Date("2026-07-01T10:00:00Z");
+    const repositorio = new RepositorioMemoria(() => agora);
+    await criarPeriodo(repositorio, 0, "2026-01", "2026-06");
+    // Cada leitura "leva" 100 s: a origem adianta o relógio ao listar a raiz.
+    const criarFonte = (): FonteArquivos => {
+      const fonte = new FonteFicticia();
+      const listarRaiz = fonte.listarRaiz.bind(fonte);
+      fonte.listarRaiz = async () => {
+        agora = new Date(agora.getTime() + 100_000);
+        return listarRaiz();
+      };
+      return fonte;
+    };
+
+    // 1ª: 100 s. 2ª começa (100 + 150 ≤ 270) e termina em 200 s. 3ª não começa (200 + 150 > 270).
+    const primeira = await processarFila({ repositorio, criarFonte, agora: () => agora });
+    expect(primeira).toEqual({ processadas: 2, restam: true });
+    expect(await repositorio.situacaoDaFila()).toEqual({ naFila: 4, emAndamento: 0 });
+
+    // A retomada continua de onde parou.
+    const segunda = await processarFila({ repositorio, criarFonte, agora: () => agora });
+    expect(segunda).toEqual({ processadas: 2, restam: true });
+    const terceira = await processarFila({ repositorio, criarFonte, agora: () => agora });
+    expect(terceira).toEqual({ processadas: 2, restam: false });
+  });
+
+  it("não inicia outra competência enquanto houver uma em andamento", async () => {
+    const repositorio = new RepositorioMemoria();
+    const { criadas } = await criarPeriodo(repositorio, 0, "2026-05", "2026-06");
+    await repositorio.sistemaReivindicar(criadas[0].id);
+    expect(await processarFila({ repositorio, criarFonte: () => new FonteFicticia() })).toEqual({
+      processadas: 0,
+      restam: true,
+    });
+    expect(await repositorio.situacaoDaFila()).toEqual({ naFila: 1, emAndamento: 1 });
+    // O escritório mostra a que está em andamento, não a da fila.
+    expect((await repositorio.execucaoEmFoco())!.id).toBe(criadas[0].id);
+  });
+
+  it("pula as competências do período que já estão ativas", async () => {
+    const repositorio = new RepositorioMemoria();
+    const jaNaFila = await criar(repositorio, 0, "2026-05");
+    const { criadas } = await criarPeriodo(repositorio, 0, "2026-04", "2026-06");
+    expect(criadas.map((e) => e.competencia)).toEqual(["2026-04", "2026-06"]);
+    expect((await repositorio.listarAuditorias(usuario)).find((a) => a.competencia === "2026-05")!.id).toBe(
+      jaNaFila.id,
+    );
   });
 });
 

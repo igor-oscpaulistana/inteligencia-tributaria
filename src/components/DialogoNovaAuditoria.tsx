@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { competenciasDoPeriodo } from "@/lib/competencia";
+import { LIMITE_COMPETENCIAS_POR_PEDIDO } from "@/lib/execucoes/tipos";
 
 interface OpcaoCompetencia {
   valor: string;
@@ -10,9 +12,11 @@ interface OpcaoCompetencia {
 interface Props {
   aberto: boolean;
   dadosFicticios: boolean;
+  /** Pasta que já vem escolhida (na tela de um cliente). */
+  pastaInicial?: string;
   aoFechar: () => void;
-  /** Inicia a auditoria; devolve uma mensagem de erro ou null quando deu certo. */
-  aoIniciar: (pasta: string, competencia: string) => Promise<string | null>;
+  /** Inicia a auditoria do período; devolve uma mensagem de erro ou null quando deu certo. */
+  aoIniciar: (pasta: string, competenciaInicial: string, competenciaFinal: string) => Promise<string | null>;
 }
 
 type Carga<T> = { estado: "carregando" } | { estado: "pronta"; itens: T[] } | { estado: "erro"; mensagem: string };
@@ -25,16 +29,18 @@ async function buscar<T>(url: string, sinal: AbortSignal, campo: string): Promis
 }
 
 /**
- * Escolha do cliente e da competência. Os clientes são as pastas de
- * "Inteligência Tributária"; as competências, as subpastas de cada cliente.
+ * Escolha do cliente e do período. Os clientes são as pastas de "Inteligência
+ * Tributária"; as competências, as subpastas de cada cliente. O período pode
+ * ser de um mês só ou de vários: cada competência é conferida separadamente.
  */
-export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoIniciar }: Props) {
+export function DialogoNovaAuditoria({ aberto, dadosFicticios, pastaInicial, aoFechar, aoIniciar }: Props) {
   const dialogo = useRef<HTMLDialogElement>(null);
   const titulo = useId();
   const [clientes, setClientes] = useState<Carga<{ pasta: string }>>({ estado: "carregando" });
-  const [pasta, setPasta] = useState("");
+  const [pasta, setPasta] = useState(pastaInicial ?? "");
   const [competencias, setCompetencias] = useState<Carga<OpcaoCompetencia>>({ estado: "carregando" });
-  const [competencia, setCompetencia] = useState("");
+  const [inicial, setInicial] = useState("");
+  const [final, setFinal] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -67,7 +73,8 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
     buscar<OpcaoCompetencia>(`/api/competencias?pasta=${encodeURIComponent(pasta)}`, controle.signal, "competencias")
       .then((itens) => {
         setCompetencias({ estado: "pronta", itens });
-        setCompetencia(itens[0]?.valor ?? "");
+        setInicial(itens[0]?.valor ?? "");
+        setFinal(itens[0]?.valor ?? "");
       })
       .catch((falha: Error) => {
         if (falha.name !== "AbortError") setCompetencias({ estado: "erro", mensagem: falha.message });
@@ -77,17 +84,18 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
 
   function escolherCliente(nova: string) {
     setPasta(nova);
-    setCompetencia("");
+    setInicial("");
+    setFinal("");
     setCompetencias({ estado: "carregando" });
     setErro(null);
   }
 
   async function enviar(evento: FormEvent) {
     evento.preventDefault();
-    if (!pasta || !competencia || enviando) return;
+    if (!pasta || !inicial || !final || enviando || acimaDoLimite) return;
     setEnviando(true);
     setErro(null);
-    const falha = await aoIniciar(pasta, competencia);
+    const falha = await aoIniciar(pasta, inicial, final);
     setEnviando(false);
     if (falha) setErro(falha);
   }
@@ -98,6 +106,33 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
   const semCompetencias = competencias.estado === "pronta" && listaCompetencias.length === 0;
   const falhaDeLeitura =
     clientes.estado === "erro" ? clientes.mensagem : competencias.estado === "erro" ? competencias.mensagem : null;
+
+  // As duas pontas se ajustam uma à outra: a final nunca fica antes da inicial.
+  function escolherInicial(valor: string) {
+    setInicial(valor);
+    if (final < valor) setFinal(valor);
+    setErro(null);
+  }
+  function escolherFinal(valor: string) {
+    setFinal(valor);
+    if (inicial > valor) setInicial(valor);
+    setErro(null);
+  }
+  // Atalho para o ano inteiro: da primeira à última competência do ano que tem pasta.
+  const anos = [...new Set(listaCompetencias.map((c) => c.valor.slice(0, 4)))].sort().reverse();
+  function escolherAno(ano: string) {
+    const doAno = listaCompetencias.map((c) => c.valor).filter((v) => v.startsWith(ano)).sort();
+    if (doAno.length === 0) return;
+    setInicial(doAno[0]);
+    setFinal(doAno[doAno.length - 1]);
+    setErro(null);
+  }
+  const anoEscolhido = (ano: string) => {
+    const doAno = listaCompetencias.map((c) => c.valor).filter((v) => v.startsWith(ano)).sort();
+    return doAno.length > 0 && inicial === doAno[0] && final === doAno[doAno.length - 1];
+  };
+  const quantidade = inicial && final ? competenciasDoPeriodo(inicial, final).length : 0;
+  const acimaDoLimite = quantidade > LIMITE_COMPETENCIAS_POR_PEDIDO;
 
   return (
     <dialog className="audit-dialog" ref={dialogo} aria-labelledby={titulo} onClose={aoFechar}>
@@ -113,8 +148,8 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
         </div>
         <p className="muted small">
           {dadosFicticios
-            ? "Escolha um cliente fictício e uma competência para acompanhar o fluxo."
-            : "Os clientes são as pastas de Inteligência Tributária no OneDrive. Escolha o cliente e a competência."}
+            ? "Escolha um cliente fictício e o período para acompanhar o fluxo."
+            : "Os clientes são as pastas de Inteligência Tributária no OneDrive. Escolha o cliente e o período."}
         </p>
 
         <div className="fields">
@@ -140,28 +175,72 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
               </span>
             )}
           </label>
-          <label>
-            Competência
-            <select
-              value={competencia}
-              onChange={(e) => setCompetencia(e.target.value)}
-              disabled={!pasta || competencias.estado !== "pronta" || semCompetencias}
-              required
-            >
-              {pasta && competencias.estado === "carregando" && <option value="">Carregando…</option>}
-              {(!pasta || semCompetencias) && <option value="">Nenhuma competência encontrada</option>}
-              {listaCompetencias.map((opcao) => (
-                <option key={opcao.valor} value={opcao.valor}>
-                  {opcao.rotulo}
-                </option>
+          <div className="period-fields">
+            <label>
+              Competência inicial
+              <select
+                value={inicial}
+                onChange={(e) => escolherInicial(e.target.value)}
+                disabled={!pasta || competencias.estado !== "pronta" || semCompetencias}
+                required
+              >
+                {pasta && competencias.estado === "carregando" && <option value="">Carregando…</option>}
+                {(!pasta || semCompetencias) && <option value="">Nenhuma competência encontrada</option>}
+                {listaCompetencias.map((opcao) => (
+                  <option key={opcao.valor} value={opcao.valor}>
+                    {opcao.rotulo}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Competência final
+              <select
+                value={final}
+                onChange={(e) => escolherFinal(e.target.value)}
+                disabled={!pasta || competencias.estado !== "pronta" || semCompetencias}
+                required
+              >
+                {pasta && competencias.estado === "carregando" && <option value="">Carregando…</option>}
+                {(!pasta || semCompetencias) && <option value="">Nenhuma competência encontrada</option>}
+                {listaCompetencias.map((opcao) => (
+                  <option key={opcao.valor} value={opcao.valor}>
+                    {opcao.rotulo}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {anos.length > 0 && (
+            <div className="year-shortcuts" role="group" aria-label="Escolher o ano inteiro">
+              <span>Ano inteiro</span>
+              {anos.map((ano) => (
+                <button
+                  key={ano}
+                  type="button"
+                  className="chip"
+                  aria-pressed={anoEscolhido(ano)}
+                  onClick={() => escolherAno(ano)}
+                >
+                  {ano}
+                </button>
               ))}
-            </select>
-            {pasta && semCompetencias && (
-              <span className="field-hint" role="status">
-                A pasta do cliente não tem subpastas de competência.
-              </span>
-            )}
-          </label>
+            </div>
+          )}
+          {pasta && semCompetencias && (
+            <span className="field-hint" role="status">
+              A pasta do cliente não tem subpastas de competência.
+            </span>
+          )}
+          {quantidade > 0 && (
+            <p className={`field-hint period-hint${acimaDoLimite ? " over" : ""}`} role="status">
+              {acimaDoLimite
+                ? `O período tem ${quantidade} competências; o máximo por pedido é ${LIMITE_COMPETENCIAS_POR_PEDIDO}.`
+                : quantidade === 1
+                  ? "1 competência será auditada."
+                  : `${quantidade} competências serão auditadas, uma de cada vez. A conferência e a retificação continuam mensais.`}
+            </p>
+          )}
         </div>
 
         {(erro ?? falhaDeLeitura) && (
@@ -174,7 +253,7 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
           <button className="secondary" type="button" onClick={aoFechar}>
             Cancelar
           </button>
-          <button className="primary" disabled={!pasta || !competencia || enviando}>
+          <button className="primary" disabled={!pasta || !inicial || !final || enviando || acimaDoLimite}>
             {enviando ? "Iniciando…" : "Iniciar auditoria"}
           </button>
         </div>

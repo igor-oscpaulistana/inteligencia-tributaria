@@ -49,12 +49,19 @@ async function EscritorioDoUsuario() {
   }
 
   const config = obterConfiguracao();
-  const ultima = await obterRepositorio(config).ultimaExecucao(usuario);
+  const repositorio = obterRepositorio(config);
+  const [emFoco, auditorias, fila] = await Promise.all([
+    repositorio.execucaoEmFoco(usuario),
+    repositorio.listarAuditorias(usuario),
+    repositorio.situacaoDaFila(usuario),
+  ]);
 
   return (
     <Escritorio
       nomeUsuario={usuario.nome}
-      execucaoInicial={ultima}
+      execucaoInicial={emFoco}
+      auditoriasIniciais={auditorias}
+      filaInicial={fila}
       ambiente={{
         fonte: config.fonte,
         avisos: config.avisos,

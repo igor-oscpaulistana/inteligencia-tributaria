@@ -1,8 +1,8 @@
 /**
  * Executor assíncrono da auditoria.
  *
- * Roda depois que a rota já respondeu (ver `after` em /api/execucoes) e grava
- * o andamento de cada etapa no repositório. A interface lê esse registro; nada
+ * Roda depois que a rota já respondeu (ver `processarFila`) e grava o andamento
+ * de cada etapa no repositório. A interface lê esse registro; nada
  * do que ela mostra vem de estado local.
  *
  * Etapa 1 do piloto: só a Triagem é executada. Auditoria e Relatório ficam
@@ -21,17 +21,23 @@ export interface DependenciasExecutor {
   agora?: () => Date;
 }
 
+/**
+ * Processa uma execução que está na fila. Devolve false, sem fazer nada, quando
+ * ela não existe ou outro processo já a pegou.
+ */
 export async function processarExecucao(
   execucaoId: string,
   { repositorio, fonte, agora = () => new Date() }: DependenciasExecutor,
-): Promise<void> {
+): Promise<boolean> {
+  // A troca de "na fila" para "em andamento" é atômica: se dois processos
+  // tentarem a mesma execução, só um segue adiante.
+  if (!(await repositorio.sistemaReivindicar(execucaoId))) return false;
   const carregada = await repositorio.sistemaCarregar(execucaoId);
-  if (!carregada || carregada.execucao.status !== "na_fila") return;
+  if (!carregada) return false;
   const { execucao, cliente } = carregada;
   const base = { usuarioId: null, clienteId: cliente.id, execucaoId };
 
   try {
-    await repositorio.sistemaAtualizarExecucao(execucaoId, { status: "em_andamento" });
     await repositorio.sistemaAtualizarEtapa(execucaoId, "triagem", {
       estado: "em_andamento",
       mensagem: "Localizando XMLs e SPEDs",
@@ -128,4 +134,5 @@ export async function processarExecucao(
       },
     });
   }
+  return true;
 }

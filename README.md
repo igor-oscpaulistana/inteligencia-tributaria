@@ -6,7 +6,7 @@ O projeto está sendo construído por etapas, começando por um piloto de um cli
 
 | Etapa | Entrega | Situação |
 | --- | --- | --- |
-| 1 | Seleção de cliente e competência, leitura do OneDrive, Triagem, escritório virtual, redator com Claude Opus | Implementada |
+| 1 | Seleção de cliente e período, leitura do OneDrive, Triagem, escritório virtual, lista de auditorias, tela do cliente, redator com Claude Opus | Implementada |
 | 2 | Auditoria: cruzamento XML × EFD-Contribuições × EFD ICMS/IPI e cálculo das diferenças | A fazer |
 | 3 | Relatório: valores, gráfico, memória de cálculo por NF-e e uso do redator | A fazer |
 | 4 | Aprovação humana e geração do TXT da EFD-Contribuições retificadora | A fazer |
@@ -32,12 +32,29 @@ npm run build
 
 ## O que a etapa 1 faz
 
-1. O usuário escolhe o cliente e a competência (exibida como `MM/AAAA`). Os clientes são as pastas de `Inteligência Tributária` e as competências, as subpastas de cada cliente.
-2. `POST /api/execucoes` registra a execução e responde na hora; a leitura dos arquivos continua em segundo plano e grava o andamento por etapa.
+1. O usuário escolhe o cliente e o período: uma competência (exibida como `MM/AAAA`) ou várias, por exemplo de 01/2023 a 12/2023. Os clientes são as pastas de `Inteligência Tributária` e as competências, as subpastas de cada cliente.
+2. `POST /api/execucoes` registra uma execução por competência do período e responde na hora; a leitura dos arquivos continua em segundo plano, uma competência de cada vez, e grava o andamento por etapa.
 3. A **Triagem** localiza a pasta, lê os três conjuntos de arquivos, confere CNPJ e período e registra o que está ausente ou incompatível. Das notas, separa as de saída do cliente (as de entrada, de terceiros, canceladas, repetidas ou de outra competência ficam fora do cálculo).
 4. O escritório virtual mostra o estado de cada estação a partir do que foi registrado. A Retificação aparece como **Aguardando aprovação** e não tem como iniciar.
 
+5. Abaixo do escritório, a lista de auditorias mostra cliente, competência e situação. O nome do cliente abre a tela dele, com o consolidado do período e a conferência completa de cada competência.
+
 A Triagem não calcula tributo. Cada arquivo lido entra no inventário com caminho, tamanho e SHA-256, para que as etapas seguintes sejam rastreáveis até a origem.
+
+## Auditoria por período e fila
+
+Um pedido de período vira uma execução por competência, todas no mesmo lote (`lote_id`, `periodo_inicio`, `periodo_fim`). A conferência é mensal e a Retificação também: cada competência tem a sua etapa de Retificação, que só sai de `aguardando_aprovacao` com aprovação humana. O período serve para acompanhar o conjunto e, nas próximas etapas, consolidar os valores.
+
+As execuções de um pedido entram na fila e são processadas da mais antiga para a mais nova (`src/lib/execucoes/fila.ts`):
+
+- uma função processa quantas competências couberem no tempo que a plataforma concede (300 s); antes de começar outra, estima se ela termina a tempo com base na mais demorada até ali;
+- o que sobra continua na fila. A tela aberta chama `POST /api/execucoes/fila` para retomar; sem ninguém com a tela aberta, a fila espera;
+- cada execução só pode ser assumida por um processo (a troca de `na_fila` para `em_andamento` é condicional);
+- uma execução em andamento sem sinal de vida por 6 minutos é encerrada como falha, para não travar a fila. Basta auditar a competência de novo.
+
+Um pedido tem no máximo 60 competências. Competências do período que já estão na fila ou em andamento são puladas.
+
+A lista de auditorias (`GET /api/execucoes`) vem da visão `auditorias_atuais`: a execução mais recente de cada cliente e competência, com notas de saída e pendências. Auditar de novo uma competência substitui a linha dela; as execuções anteriores continuam no banco e na trilha.
 
 ## Estrutura de pastas no OneDrive
 
@@ -76,7 +93,7 @@ No MVP não há segregação por analista: quem está em `usuarios_autorizados` 
 
 Não há cadastro manual de clientes. Os clientes disponíveis são as pastas de `Inteligência Tributária`; o registro no banco é criado quando alguém pede a auditoria de uma pasta, e o CNPJ é gravado a partir da EFD-Contribuições na primeira triagem sem pendência impeditiva. As triagens seguintes são conferidas contra esse CNPJ.
 
-O que o banco garante: só contas autorizadas leem e criam; andamento, triagem, inventário e CNPJ são gravados apenas pelo servidor; há uma única execução ativa por cliente e competência; a etapa de Retificação não sai de `aguardando_aprovacao`; a trilha de auditoria só aceita inclusão.
+O que o banco garante: só contas autorizadas leem e criam; andamento, triagem, inventário e CNPJ são gravados apenas pelo servidor; há uma única execução ativa por cliente e competência; a competência de uma execução fica dentro do período do pedido; a etapa de Retificação não sai de `aguardando_aprovacao`; a trilha de auditoria só aceita inclusão.
 
 ### OneDrive (Microsoft Graph e Entra ID)
 
@@ -118,11 +135,11 @@ O desenho é decorativo para leitores de tela. Cada estação tem um botão sobr
 
 ```text
 src/app/                  páginas e rotas de API (Next.js, App Router)
-src/components/           escritório virtual, cena isométrica, diálogo e painel de triagem
+src/components/           escritório virtual, cena isométrica, lista de auditorias, tela do cliente, diálogo e painel de triagem
 src/lib/agentes/          agente de Triagem e definição das quatro estações
 src/lib/arquivos/         origem dos arquivos: Microsoft Graph, dados fictícios, leiaute de pastas
 src/lib/fiscal/           leitura do cabeçalho do SPED e identificação dos XMLs
-src/lib/execucoes/        execuções, executor assíncrono, repositórios (Supabase e memória)
+src/lib/execucoes/        execuções, fila, executor assíncrono, repositórios (Supabase e memória)
 src/lib/redator/          redação do relatório: Claude Opus e simulador
 supabase/migrations/      tabelas, permissões e políticas de acesso
 supabase/testes/          testes das regras do banco
@@ -130,7 +147,10 @@ supabase/testes/          testes das regras do banco
 
 ## Limites conhecidos da etapa 1
 
-- O processamento em segundo plano usa `after()` do Next.js e termina junto com o tempo máximo da função (300 s configurados). Competências com dezenas de milhares de XMLs avulsos podem precisar de fila ou workflow durável; entregar os XMLs em ZIP reduz muito o tempo de leitura.
+- O processamento em segundo plano usa `after()` do Next.js e termina junto com o tempo máximo da função (300 s configurados). Uma competência que sozinha passe disso (dezenas de milhares de XMLs avulsos) falha e precisa de workflow durável; entregar os XMLs em ZIP reduz muito o tempo de leitura.
+- A fila só avança além do tempo de uma função enquanto alguém está com o painel aberto. Não há agendador no servidor.
+- O período acumulado hoje reúne os resultados da Triagem (competências aptas, pendências, notas de saída). O cálculo consolidado das diferenças de PIS e COFINS chega com a etapa 2.
+- Não há tela para excluir uma auditoria: a exclusão é feita no banco e fica registrada na trilha.
 - Arquivos acima de 250 MB não são lidos.
 - O modo de demonstração guarda as execuções na memória do processo: serve para rodar localmente, não em produção com várias instâncias.
 - As escriturações fictícias têm só os registros de abertura e encerramento; não são arquivos válidos para o PVA.

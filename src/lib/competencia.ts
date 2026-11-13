@@ -57,3 +57,24 @@ export function dataNaCompetencia(dataIso: string, competencia: string): boolean
 export function compararCompetenciasDesc(a: string, b: string): number {
   return a < b ? 1 : a > b ? -1 : 0;
 }
+
+/** Competência seguinte: "2023-12" → "2024-01". */
+export function proximaCompetencia(competencia: string): string {
+  const { ano, mes } = partesCompetencia(competencia);
+  return mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
+}
+
+/** Todas as competências de um período, em ordem crescente e com as duas pontas. */
+export function competenciasDoPeriodo(inicio: string, fim: string): string[] {
+  if (!competenciaValida(inicio) || !competenciaValida(fim) || inicio > fim) return [];
+  const lista: string[] = [];
+  for (let atual = inicio; atual <= fim; atual = proximaCompetencia(atual)) lista.push(atual);
+  return lista;
+}
+
+/** "01/2023 a 12/2023", ou só "05/2026" quando o período é de um mês. */
+export function formatarPeriodo(inicio: string, fim: string): string {
+  return inicio === fim
+    ? formatarCompetencia(inicio)
+    : `${formatarCompetencia(inicio)} a ${formatarCompetencia(fim)}`;
+}

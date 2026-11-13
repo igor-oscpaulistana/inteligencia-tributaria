@@ -57,8 +57,46 @@ export interface Execucao {
   criadaEm: string;
   atualizadaEm: string;
   erro: string | null;
+  /** Pedido que criou a execução; as competências de um mesmo período compartilham o lote. */
+  loteId: string;
+  /** Período pedido, em "AAAA-MM"; igual à competência quando o pedido foi de um mês só. */
+  periodoInicio: string;
+  periodoFim: string;
   etapas: Etapa[];
   triagem: ResultadoTriagem | null;
+}
+
+/** Período de um pedido de auditoria: uma execução por competência, todas no mesmo lote. */
+export interface Lote {
+  id: string;
+  periodoInicio: string;
+  periodoFim: string;
+}
+
+/** Linha da lista de auditorias: a execução mais recente de um cliente e competência. */
+export interface ResumoAuditoria {
+  id: string;
+  clienteId: string;
+  clienteNome: string;
+  competencia: string;
+  status: StatusExecucao;
+  origemDados: TipoFonte;
+  erro: string | null;
+  criadaPorNome: string;
+  criadaEm: string;
+  atualizadaEm: string;
+  loteId: string;
+  periodoInicio: string;
+  periodoFim: string;
+  /** Números da triagem; null enquanto ela não terminou. */
+  notasSaida: number | null;
+  pendenciasImpeditivas: number | null;
+  pendenciasAlerta: number | null;
+}
+
+export interface SituacaoFila {
+  naFila: number;
+  emAndamento: number;
 }
 
 export type AtualizacaoEtapa = Partial<Omit<Etapa, "agente">>;
@@ -89,16 +127,34 @@ export interface Repositorio {
    * Quem chama já conferiu que a pasta existe em "Inteligência Tributária".
    */
   registrarCliente(usuario: Usuario, pasta: string): Promise<Cliente>;
+  obterCliente(usuario: Usuario, clienteId: string): Promise<Cliente | null>;
+  /** Cria a execução de uma competência dentro do lote (pedido) informado. */
   criarExecucao(
     usuario: Usuario,
     cliente: Cliente,
     competencia: string,
     origem: TipoFonte,
+    lote: Lote,
   ): Promise<ResultadoCriacao>;
   obterExecucao(usuario: Usuario, execucaoId: string): Promise<Execucao | null>;
-  ultimaExecucao(usuario: Usuario): Promise<Execucao | null>;
+  /**
+   * Execução que o escritório mostra: a que está em andamento; sem ela, a
+   * próxima da fila; sem fila, a mais recente.
+   */
+  execucaoEmFoco(usuario: Usuario): Promise<Execucao | null>;
+  /** Execução mais recente de cada cliente e competência, opcionalmente de um só cliente. */
+  listarAuditorias(usuario: Usuario, filtro?: { clienteId?: string }): Promise<ResumoAuditoria[]>;
+  situacaoDaFila(usuario: Usuario): Promise<SituacaoFila>;
   listarArquivos(usuario: Usuario, execucaoId: string): Promise<ArquivoTriado[]>;
 
+  /** Encerra como falha as execuções em andamento sem sinal de vida; devolve quantas foram. */
+  sistemaEncerrarInterrompidas(): Promise<number>;
+  /** Quantas execuções estão na fila e em andamento, sem depender da sessão de um usuário. */
+  sistemaSituacaoDaFila(): Promise<SituacaoFila>;
+  /** Execução mais antiga que ainda está na fila. */
+  sistemaProximaDaFila(): Promise<string | null>;
+  /** Passa a execução de "na fila" para "em andamento"; false se outro processo já a pegou. */
+  sistemaReivindicar(execucaoId: string): Promise<boolean>;
   sistemaCarregar(execucaoId: string): Promise<{ execucao: Execucao; cliente: Cliente } | null>;
   sistemaAtualizarExecucao(
     execucaoId: string,
@@ -115,8 +171,17 @@ export interface Repositorio {
   registrarEvento(evento: EventoAuditoria): Promise<void>;
 }
 
-/** Sem sinal de vida por este tempo, a execução é considerada interrompida. */
-export const LIMITE_SEM_ATIVIDADE_MS = 15 * 60 * 1000;
+/**
+ * Sem sinal de vida por este tempo, a execução em andamento é considerada
+ * interrompida. A função que a processa vive no máximo 5 minutos; passado esse
+ * prazo com folga, ela certamente não está mais rodando.
+ */
+export const LIMITE_SEM_ATIVIDADE_MS = 6 * 60 * 1000;
+
+export const MENSAGEM_INTERROMPIDA = "Execução interrompida antes de terminar. Inicie uma nova auditoria desta competência.";
+
+/** Máximo de competências em um único pedido (cinco anos). */
+export const LIMITE_COMPETENCIAS_POR_PEDIDO = 60;
 
 export function etapasIniciais(): Etapa[] {
   return AGENTES.map((agente) => ({

@@ -1,5 +1,6 @@
 -- Testes das migrações: acesso único do MVP, cadastro automático de clientes,
--- trava da Retificação, execução única por competência e trilha imutável.
+-- trava da Retificação, execução única por competência, trilha imutável,
+-- auditoria por período e lista de auditorias.
 -- Cada bloco falha com exceção se a regra não valer.
 
 \set ON_ERROR_STOP on
@@ -185,6 +186,111 @@ insert into public.execucoes (cliente_id, competencia, origem_dados, criada_por_
 select id, '2026-05', 'ficticia', 'Autorizado Teste' from public.clientes where pasta_onedrive = 'Cliente Um';
 select pg_temp.confere((select count(*) = 3 from public.execucoes), 'nova execução após a anterior terminar');
 select pg_temp.confere((select count(*) = 1 from public.execucao_arquivos), 'autorizado vê o inventário');
+commit;
+
+-- ------------------------------------- período, fila e lista de auditorias ---
+-- Neste ponto: Cliente Um tem duas execuções de 2026-05 (a antiga, concluída, e
+-- a nova, na fila) e Cliente Dois tem uma de 2026-05, concluída.
+select pg_temp.confere(
+  (select bool_and(periodo_inicio = competencia and periodo_fim = competencia and lote_id is not null)
+    from public.execucoes),
+  'pedido sem período vale para a própria competência');
+
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+
+-- Pedido de um período: uma execução por competência, todas no mesmo lote.
+insert into public.execucoes
+  (cliente_id, competencia, origem_dados, criada_por_nome, lote_id, periodo_inicio, periodo_fim)
+select c.id, mes, 'ficticia', 'Autorizado Teste', '99999999-0000-4000-8000-000000000009', '2023-01', '2023-03'
+from public.clientes c, unnest(array['2023-01', '2023-02', '2023-03']) mes
+where c.pasta_onedrive = 'Cliente Dois';
+select pg_temp.confere(
+  (select count(*) = 3 and bool_and(status = 'na_fila') from public.execucoes
+    where lote_id = '99999999-0000-4000-8000-000000000009'),
+  'período cria uma execução na fila por competência');
+select pg_temp.confere(
+  (select count(*) = 3 from public.trilha_auditoria
+    where acao = 'execucao.criada' and detalhes ->> 'periodo_inicio' = '2023-01'
+      and detalhes ->> 'periodo_fim' = '2023-03'),
+  'trilha registra o período do pedido');
+select pg_temp.confere(
+  (select count(*) = 12 from public.execucao_etapas e join public.execucoes x on x.id = e.execucao_id
+    where x.lote_id = '99999999-0000-4000-8000-000000000009')
+  and (select count(*) = 3 from public.execucao_etapas e join public.execucoes x on x.id = e.execucao_id
+    where x.lote_id = '99999999-0000-4000-8000-000000000009'
+      and e.agente = 'retificacao' and e.estado = 'aguardando_aprovacao'),
+  'cada competência do período tem as suas etapas e a sua Retificação bloqueada');
+select pg_temp.espera_erro(
+  $$insert into public.execucoes
+      (cliente_id, competencia, origem_dados, criada_por_nome, periodo_inicio, periodo_fim)
+    select id, '2023-04', 'ficticia', 'Autorizado Teste', '2023-01', '2023-03'
+    from public.clientes where pasta_onedrive = 'Cliente Dois'$$,
+  '23514', 'competência fora do período do pedido');
+select pg_temp.espera_erro(
+  $$insert into public.execucoes
+      (cliente_id, competencia, origem_dados, criada_por_nome, periodo_inicio, periodo_fim)
+    select id, '2023-04', 'ficticia', 'Autorizado Teste', '2023-1', '2023-04'
+    from public.clientes where pasta_onedrive = 'Cliente Dois'$$,
+  '23514', 'período em formato inválido');
+select pg_temp.espera_erro(
+  $$insert into public.execucoes
+      (cliente_id, competencia, origem_dados, criada_por_nome, lote_id, periodo_inicio, periodo_fim)
+    select id, '2023-02', 'ficticia', 'Autorizado Teste', gen_random_uuid(), '2023-02', '2023-02'
+    from public.clientes where pasta_onedrive = 'Cliente Dois'$$,
+  '23505', 'competência do período que já está na fila');
+
+-- Lista: uma linha por cliente e competência, com a execução mais recente.
+select pg_temp.confere(
+  (select count(*) = 5 from public.auditorias_atuais), 'lista traz uma linha por cliente e competência');
+select pg_temp.confere(
+  (select a.status = 'na_fila' and a.cliente_nome = 'Cliente Um'
+    from public.auditorias_atuais a join public.clientes c on c.id = a.cliente_id
+    where c.pasta_onedrive = 'Cliente Um' and a.competencia = '2026-05'),
+  'lista mostra a execução mais recente da competência');
+select pg_temp.confere(
+  (select notas_saida is null and pendencias_impeditivas is null and pendencias_alerta is null
+    from public.auditorias_atuais where competencia = '2023-02'),
+  'sem triagem, a lista não inventa números');
+select pg_temp.espera_erro(
+  $$update public.auditorias_atuais set status = 'triagem_concluida'$$, '55000', 'lista é só leitura');
+commit;
+
+-- O servidor grava a triagem; a lista passa a mostrar os números dela.
+begin;
+set local role service_role;
+update public.execucoes
+  set status = 'triagem_com_pendencias',
+      triagem = '{"xml": {"saidas": 7}, "pendencias": [{"gravidade": "impeditiva"}, {"gravidade": "alerta"},
+                 {"gravidade": "alerta"}, {"gravidade": "informativa"}]}'
+  where competencia = '2023-01';
+select pg_temp.confere(
+  (select count(*) = 2 from public.execucoes where status = 'na_fila' and competencia like '2023-%'),
+  'servidor vê o restante do período na fila');
+commit;
+
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select pg_temp.confere(
+  (select notas_saida = 7 and pendencias_impeditivas = 1 and pendencias_alerta = 2
+      and periodo_inicio = '2023-01' and periodo_fim = '2023-03'
+    from public.auditorias_atuais where competencia = '2023-01'),
+  'lista mostra notas de saída, pendências e o período do pedido');
+commit;
+
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'cccccccc-0000-4000-8000-000000000003';
+select pg_temp.confere(
+  (select count(*) = 0 from public.auditorias_atuais), 'não autorizado não vê a lista de auditorias');
+commit;
+
+begin;
+set local role anon;
+select pg_temp.espera_erro(
+  $$select * from public.auditorias_atuais$$, '42501', 'anônimo não lê a lista de auditorias');
 commit;
 
 \echo 'OK: todas as regras foram verificadas.'

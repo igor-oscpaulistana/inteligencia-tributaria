@@ -1,16 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DEFINICOES_AGENTES } from "@/lib/agentes/definicoes";
 import type { TipoFonte } from "@/lib/arquivos/tipos";
-import { formatarCompetencia } from "@/lib/competencia";
+import { formatarCompetencia, formatarPeriodo } from "@/lib/competencia";
 import { execucaoAtiva, resumoDaExecucao, situacaoDasEstacoes } from "@/lib/execucoes/apresentacao";
-import type { AgenteId, Execucao } from "@/lib/execucoes/tipos";
+import {
+  STATUS_ATIVOS,
+  type AgenteId,
+  type Execucao,
+  type ResumoAuditoria,
+  type SituacaoFila,
+} from "@/lib/execucoes/tipos";
+import { Cabecalho } from "./Cabecalho";
 import { CenaEscritorio } from "./CenaEscritorio";
 import { DialogoNovaAuditoria } from "./DialogoNovaAuditoria";
-import { PainelTriagem } from "./PainelTriagem";
 import { MarcaEalex } from "./MarcaEalex";
+import { TabelaAuditorias } from "./TabelaAuditorias";
+import { useAuditorias } from "./useAuditorias";
 
 export interface AmbientePainel {
   fonte: TipoFonte;
@@ -19,7 +26,10 @@ export interface AmbientePainel {
 
 interface Props {
   nomeUsuario: string;
+  /** Execução que o escritório mostra ao abrir: a ativa ou, sem ela, a mais recente. */
   execucaoInicial: Execucao | null;
+  auditoriasIniciais: ResumoAuditoria[];
+  filaInicial: SituacaoFila;
   ambiente: AmbientePainel;
   /** Ação de saída; ausente no modo de demonstração. */
   sair?: () => Promise<void>;
@@ -32,8 +42,29 @@ function horario(iso: string | null): string | null {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Props) {
+/**
+ * Execução que a sala deve mostrar entre as da lista: a que está em andamento
+ * ou, sem ela, a próxima da fila. Sem nenhuma ativa, a sala fica como está.
+ */
+function escolherFoco(auditorias: ResumoAuditoria[]): ResumoAuditoria | null {
+  const emAndamento = auditorias.find((a) => a.status === "em_andamento");
+  if (emAndamento) return emAndamento;
+  const fila = auditorias
+    .filter((a) => a.status === "na_fila")
+    .sort((a, b) => a.criadaEm.localeCompare(b.criadaEm) || a.competencia.localeCompare(b.competencia));
+  return fila[0] ?? null;
+}
+
+export function Escritorio({
+  nomeUsuario,
+  execucaoInicial,
+  auditoriasIniciais,
+  filaInicial,
+  ambiente,
+  sair,
+}: Props) {
   const [execucao, setExecucao] = useState(execucaoInicial);
+  const { auditorias, falha: falhaLista, atualizar } = useAuditorias(auditoriasIniciais, filaInicial);
   const [selecionada, setSelecionada] = useState<AgenteId>("triagem");
   const [dialogoAberto, setDialogoAberto] = useState(false);
   const [falhaConsulta, setFalhaConsulta] = useState(false);
@@ -57,6 +88,8 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
         if (!cancelado) {
           setExecucao(corpo.execucao);
           setFalhaConsulta(false);
+          // Terminou: a lista é consultada na hora, para a sala passar à próxima da fila.
+          if (!STATUS_ATIVOS.includes(corpo.execucao.status)) atualizar();
         }
       } catch {
         if (!cancelado) setFalhaConsulta(true);
@@ -67,33 +100,52 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
       cancelado = true;
       window.clearInterval(intervalo);
     };
-  }, [ativa, execucaoId]);
+  }, [ativa, execucaoId, atualizar]);
 
-  async function iniciar(pasta: string, competencia: string): Promise<string | null> {
+  // A sala acompanha a fila: quando a execução em foco termina e há outra
+  // ativa na lista, passa a mostrar essa.
+  const desejado = escolherFoco(auditorias);
+  const trocarFoco =
+    desejado !== null &&
+    (!ativa || (execucao?.status === "na_fila" && desejado.status === "em_andamento"));
+  const proximoFocoId = trocarFoco ? desejado.id : null;
+  useEffect(() => {
+    if (!proximoFocoId || proximoFocoId === execucaoId) return;
+    let cancelado = false;
+    fetch(`/api/execucoes/${proximoFocoId}`, { cache: "no-store" })
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((corpo: { execucao: Execucao } | null) => {
+        if (!cancelado && corpo) setExecucao(corpo.execucao);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelado = true;
+    };
+  }, [proximoFocoId, execucaoId]);
+
+  async function iniciar(pasta: string, competenciaInicial: string, competenciaFinal: string): Promise<string | null> {
     try {
       const resposta = await fetch("/api/execucoes", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pasta, competencia }),
+        body: JSON.stringify({ pasta, competenciaInicial, competenciaFinal }),
       });
       const corpo = await resposta.json();
-      if (resposta.status === 409 && corpo.execucaoId) {
-        // Já há uma auditoria em andamento para essa competência: acompanha a existente.
-        const existente = await fetch(`/api/execucoes/${corpo.execucaoId}`, { cache: "no-store" });
-        if (existente.ok) setExecucao((await existente.json()).execucao);
-        setSelecionada("triagem");
-        setDialogoAberto(false);
-        return null;
-      }
       if (!resposta.ok) return corpo.erro ?? "Não foi possível iniciar a auditoria.";
-      setExecucao(corpo.execucao);
+      // Sem nada em andamento, a sala já mostra a primeira competência do pedido.
+      if (!ativa) setExecucao(corpo.execucao);
       setSelecionada("triagem");
       setDialogoAberto(false);
+      atualizar();
       return null;
     } catch {
       return "Sem conexão com o servidor. Tente novamente.";
     }
   }
+
+  // Andamento do pedido (lote) da execução em foco, quando ele tem mais de uma competência.
+  const doLote = execucao ? auditorias.filter((a) => a.loteId === execucao.loteId) : [];
+  const encerradasDoLote = doLote.filter((a) => !STATUS_ATIVOS.includes(a.status)).length;
 
   const definicao = DEFINICOES_AGENTES.find((d) => d.id === selecionada)!;
   const estacao = estacoes.find((e) => e.agente === selecionada)!;
@@ -101,28 +153,8 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
 
   return (
     <>
-      <a className="skip-link" href="#titulo-triagem">Ir para a triagem</a>
-      <header className="top">
-        <div className="top-inner">
-          <MarcaEalex />
-          <div className="top-side">
-            {ficticio && <span className="demo">Dados demonstrativos</span>}
-            <span className="user">{nomeUsuario}</span>
-            {sair && (
-              <Link className="top-link" href="/senha">
-                Alterar senha
-              </Link>
-            )}
-            {sair && (
-              <form action={sair}>
-                <button className="secondary" type="submit">
-                  Sair
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      </header>
+      <a className="skip-link" href="#titulo-auditorias">Ir para as auditorias</a>
+      <Cabecalho nomeUsuario={nomeUsuario} dadosFicticios={ficticio} sair={sair} />
 
       <main>
         <div className="intro">
@@ -130,7 +162,7 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
             <h1><MarcaEalex /></h1>
             <p className="muted">Auditoria de PIS e COFINS sobre notas de saída</p>
           </div>
-          <button className="primary" type="button" onClick={() => setDialogoAberto(true)} disabled={ativa}>
+          <button className="primary" type="button" onClick={() => setDialogoAberto(true)}>
             + Nova auditoria
           </button>
         </div>
@@ -145,7 +177,7 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
             </ul>
           </div>
         )}
-        {falhaConsulta && (
+        {(falhaConsulta || falhaLista) && (
           <p className="notice error app-notice" role="alert">
             Não foi possível atualizar o andamento. Nova tentativa em instantes.
           </p>
@@ -199,8 +231,14 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
             <p className="run-title small">
               {execucao
                 ? `${execucao.clienteNome} · ${formatarCompetencia(execucao.competencia)}`
-                : "Escolha um cliente e uma competência para começar."}
+                : "Escolha um cliente e um período para começar."}
             </p>
+            {execucao && doLote.length > 1 && (
+              <p className="muted small lote-progress" role="status">
+                Período {formatarPeriodo(execucao.periodoInicio, execucao.periodoFim)} · {encerradasDoLote} de{" "}
+                {doLote.length} competências conferidas
+              </p>
+            )}
             <progress className="progress" value={concluidas} max={4} aria-label="Etapas concluídas" />
             <ol className="steps">
               {DEFINICOES_AGENTES.map((d, indice) => {
@@ -268,23 +306,33 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
           </aside>
         </div>
 
-        {execucao ? (
-          <PainelTriagem key={execucao.id} execucao={execucao} />
-        ) : (
-          <section className="report" aria-labelledby="titulo-triagem">
-            <div className="section-head">
-              <div>
-                <span className="ea-kicker">Conferência documental</span>
-                <h2 id="titulo-triagem" tabIndex={-1}>Triagem dos arquivos</h2>
-              </div>
+        <section className="report" aria-labelledby="titulo-auditorias">
+          <div className="section-head">
+            <div>
+              <span className="ea-kicker">Clientes e competências</span>
+              <h2 id="titulo-auditorias" tabIndex={-1}>
+                Auditorias
+              </h2>
+              <p className="muted small">
+                Situação mais recente de cada competência. Clique no cliente para abrir a conferência completa.
+              </p>
             </div>
+          </div>
+          {auditorias.length === 0 ? (
             <div className="card empty">
-              <span className="empty-symbol" aria-hidden="true">▤</span>
+              <span className="empty-symbol" aria-hidden="true">
+                ▤
+              </span>
               <h3>Seu próximo passo começa aqui</h3>
-              <p>Nenhuma auditoria foi iniciada. Use “Nova auditoria” para escolher o cliente e a competência. A conferência dos arquivos aparecerá nesta área.</p>
+              <p>
+                Nenhuma auditoria foi iniciada. Use “Nova auditoria” para escolher o cliente e o período. Cada
+                competência auditada aparece nesta lista.
+              </p>
             </div>
-          </section>
-        )}
+          ) : (
+            <TabelaAuditorias auditorias={auditorias} />
+          )}
+        </section>
       </main>
 
       <footer className="app-footer">

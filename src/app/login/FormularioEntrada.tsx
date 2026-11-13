@@ -9,7 +9,7 @@ export function FormularioEntrada() {
   const [estado, acao, enviando] = useActionState(entrar, INICIAL);
 
   return (
-    <form action={acao}>
+    <form action={acao} aria-busy={enviando}>
       <div className="fields">
         <label>
           E-mail

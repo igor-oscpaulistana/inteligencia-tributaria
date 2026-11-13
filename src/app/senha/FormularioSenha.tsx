@@ -11,14 +11,14 @@ export function FormularioSenha() {
 
   if (estado.alterada) {
     return (
-      <p className="notice" role="status" style={{ marginTop: 16 }}>
+      <p className="notice success" role="status" style={{ marginTop: 16 }}>
         Senha alterada. Use a nova senha no próximo acesso.
       </p>
     );
   }
 
   return (
-    <form action={acao}>
+    <form action={acao} aria-busy={enviando}>
       <div className="fields">
         <label>
           Nova senha

@@ -62,13 +62,16 @@ export function PainelTriagem({ execucao }: { execucao: Execucao }) {
       <section className="report" aria-labelledby="titulo-triagem">
         <div className="section-head">
           <div>
-            <h2 id="titulo-triagem">Triagem dos arquivos</h2>
+            <span className="ea-kicker">Conferência documental</span>
+            <h2 id="titulo-triagem" tabIndex={-1}>Triagem dos arquivos</h2>
             <p className="muted small">
               {execucao.clienteNome} · {competencia} · {origem}
             </p>
           </div>
         </div>
-        <div className="card empty" role="status">
+        <div className="card empty" role={execucao.status === "falhou" ? "alert" : "status"}>
+          <span className="empty-symbol" aria-hidden="true">{execucao.status === "falhou" ? "!" : "…"}</span>
+          <h3>{execucao.status === "falhou" ? "Não foi possível concluir a triagem" : "Conferência em andamento"}</h3>
           {execucao.status === "falhou"
             ? (execucao.erro ?? "A triagem falhou.")
             : "A conferência aparece aqui quando a Triagem terminar."}
@@ -103,7 +106,8 @@ export function PainelTriagem({ execucao }: { execucao: Execucao }) {
     <section className="report" aria-labelledby="titulo-triagem">
       <div className="section-head">
         <div>
-          <h2 id="titulo-triagem">Triagem dos arquivos</h2>
+          <span className="ea-kicker">Conferência documental</span>
+            <h2 id="titulo-triagem" tabIndex={-1}>Triagem dos arquivos</h2>
           <p className="muted small">
             {execucao.clienteNome} · {competencia} · {origem}
             {triagem.caminhoCompetencia ? ` · ${triagem.caminhoCompetencia}` : ""}
@@ -178,9 +182,9 @@ export function PainelTriagem({ execucao }: { execucao: Execucao }) {
           <section className="card panel" aria-labelledby="titulo-conferencia">
             <h3 id="titulo-conferencia">Conferência de CNPJ e período</h3>
             {escrituracoes.length === 0 ? (
-              <p className="muted small">Nenhuma escrituração foi encontrada na pasta.</p>
+              <p className="muted small">Nenhuma escrituração encontrada. A lista será exibida quando houver arquivos disponíveis na triagem.</p>
             ) : (
-              <div className="table-wrap">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Conferência de CNPJ e período; role para ver todas as colunas">
                 <table>
                   <thead>
                     <tr>
@@ -219,7 +223,7 @@ export function PainelTriagem({ execucao }: { execucao: Execucao }) {
           <section className="card panel" aria-labelledby="titulo-pendencias">
             <h3 id="titulo-pendencias">Pendências e avisos</h3>
             {pendencias.length === 0 ? (
-              <p className="muted small">Nenhuma pendência registrada.</p>
+              <p className="muted small report-success"><span aria-hidden="true">✓ </span>Nenhuma pendência registrada nesta triagem.</p>
             ) : (
               <ul className="findings">
                 {pendencias.map((p, indice) => (
@@ -240,7 +244,7 @@ export function PainelTriagem({ execucao }: { execucao: Execucao }) {
                 (arquivos.filter((a) => a.situacao !== "considerado").length === 0 ? (
                   <p className="note">Todos os arquivos da pasta foram considerados.</p>
                 ) : (
-                  <div className="table-wrap">
+                  <div className="table-wrap" tabIndex={0} role="region" aria-label="Arquivos fora do cálculo; role para ver todas as colunas">
                     <table>
                       <thead>
                         <tr>

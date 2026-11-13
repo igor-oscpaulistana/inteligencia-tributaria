@@ -19,10 +19,10 @@ export default function PaginaEntrada() {
         </aside>
         <div className="card login-card">
           <span className="ea-kicker">Bem-vindo de volta</span>
-        <h1>Entrar</h1>
-        <p className="muted small">Acesso restrito aos analistas autorizados.</p>
-        <FormularioEntrada />
-        <p className="form-note">Use as credenciais fornecidas pela administração. Para solicitar acesso, fale com o responsável pelo sistema.</p>
+          <h1>Entrar</h1>
+          <p className="muted small">Acesso restrito aos analistas autorizados.</p>
+          <FormularioEntrada />
+          <p className="form-note">Use as credenciais fornecidas pela administração. Para solicitar acesso, fale com o responsável pelo sistema.</p>
         </div>
       </div>
     </div>

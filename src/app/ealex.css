@@ -172,3 +172,4 @@
   .login .login-card { padding: 28px; }
   .app-footer { width: calc(100% - 24px); flex-wrap: wrap; }
 }
+.report .report-success { color: var(--ea-success); padding: 12px 16px; background: #edf8f2; border-radius: 8px; }

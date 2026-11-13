@@ -100,10 +100,13 @@ export function DialogoNovaAuditoria({ aberto, dadosFicticios, aoFechar, aoInici
     clientes.estado === "erro" ? clientes.mensagem : competencias.estado === "erro" ? competencias.mensagem : null;
 
   return (
-    <dialog ref={dialogo} aria-labelledby={titulo} onClose={aoFechar}>
+    <dialog className="audit-dialog" ref={dialogo} aria-labelledby={titulo} onClose={aoFechar}>
       <form onSubmit={enviar}>
         <div className="dialog-head">
-          <h2 id={titulo}>Nova auditoria</h2>
+          <div>
+            <span className="ea-kicker">Cliente e período</span>
+            <h2 id={titulo}>Nova auditoria</h2>
+          </div>
           <button className="close" type="button" onClick={aoFechar} aria-label="Fechar">
             ×
           </button>

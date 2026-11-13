@@ -10,6 +10,7 @@ import type { AgenteId, Execucao } from "@/lib/execucoes/tipos";
 import { CenaEscritorio } from "./CenaEscritorio";
 import { DialogoNovaAuditoria } from "./DialogoNovaAuditoria";
 import { PainelTriagem } from "./PainelTriagem";
+import { MarcaEalex } from "./MarcaEalex";
 
 export interface AmbientePainel {
   fonte: TipoFonte;
@@ -100,14 +101,10 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
 
   return (
     <>
+      <a className="skip-link" href="#titulo-triagem">Ir para a triagem</a>
       <header className="top">
         <div className="top-inner">
-          <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              ▦
-            </span>
-            Inteligência Tributária
-          </div>
+          <MarcaEalex />
           <div className="top-side">
             {ficticio && <span className="demo">Dados demonstrativos</span>}
             <span className="user">{nomeUsuario}</span>
@@ -130,7 +127,7 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
       <main>
         <div className="intro">
           <div>
-            <h1>Escritório virtual</h1>
+            <h1><MarcaEalex /></h1>
             <p className="muted">Auditoria de PIS e COFINS sobre notas de saída</p>
           </div>
           <button className="primary" type="button" onClick={() => setDialogoAberto(true)} disabled={ativa}>
@@ -139,7 +136,7 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
         </div>
 
         {ambiente.avisos.length > 0 && (
-          <div className="notice" role="status">
+          <div className="notice app-notice" role="status">
             <strong>Configuração do ambiente</strong>
             <ul>
               {ambiente.avisos.map((aviso) => (
@@ -149,7 +146,7 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
           </div>
         )}
         {falhaConsulta && (
-          <p className="notice error" role="alert">
+          <p className="notice error app-notice" role="alert">
             Não foi possível atualizar o andamento. Nova tentativa em instantes.
           </p>
         )}
@@ -276,14 +273,24 @@ export function Escritorio({ nomeUsuario, execucaoInicial, ambiente, sair }: Pro
         ) : (
           <section className="report" aria-labelledby="titulo-triagem">
             <div className="section-head">
-              <h2 id="titulo-triagem">Triagem dos arquivos</h2>
+              <div>
+                <span className="ea-kicker">Conferência documental</span>
+                <h2 id="titulo-triagem" tabIndex={-1}>Triagem dos arquivos</h2>
+              </div>
             </div>
             <div className="card empty">
-              Nenhuma auditoria foi iniciada. Use “Nova auditoria” para escolher o cliente e a competência.
+              <span className="empty-symbol" aria-hidden="true">▤</span>
+              <h3>Seu próximo passo começa aqui</h3>
+              <p>Nenhuma auditoria foi iniciada. Use “Nova auditoria” para escolher o cliente e a competência. A conferência dos arquivos aparecerá nesta área.</p>
             </div>
           </section>
         )}
       </main>
+
+      <footer className="app-footer">
+        <MarcaEalex />
+        <span>Inteligência tributária · Conferência e acompanhamento documental</span>
+      </footer>
 
       <DialogoNovaAuditoria
         aberto={dialogoAberto}

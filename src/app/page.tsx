@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { MarcaEalex } from "@/components/MarcaEalex";
 import { Escritorio } from "@/components/Escritorio";
 import { obterUsuario } from "@/lib/auth/sessao";
 import { obterConfiguracao, obterRepositorio } from "@/lib/servicos";
@@ -9,9 +10,10 @@ export default function Pagina() {
   return (
     <Suspense
       fallback={
-        <main>
+        <main className="access-loading">
+          <MarcaEalex />
           <p className="muted" role="status">
-            Abrindo o escritório…
+            Abrindo o E-Alex…
           </p>
         </main>
       }
@@ -30,9 +32,10 @@ async function EscritorioDoUsuario() {
     return (
       <div className="login">
         <div className="card login-card">
+          <MarcaEalex />
           <h1>Sem acesso</h1>
           <p className="muted small" style={{ marginBottom: 16 }}>
-            A conta {usuario.email ?? usuario.nome} não está autorizada a usar o Inteligência Tributária. Peça a
+            A conta {usuario.email ?? usuario.nome} não está autorizada a usar o E-Alex. Peça a
             liberação a quem administra o sistema.
           </p>
           <form action={sair}>

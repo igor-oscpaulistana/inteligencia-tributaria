@@ -3,7 +3,7 @@ import "./globals.css";
 import "./ealex.css";
 
 export const metadata: Metadata = {
-  title: "Inteligência Tributária · Escritório Virtual",
+  title: "E-Alex · Inteligência tributária",
   description: "Auditoria de PIS e COFINS sobre notas fiscais de saída.",
 };
 

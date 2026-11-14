@@ -1,0 +1,112 @@
+{#-
+  Cláusulas do corpo do contrato social, compartilhadas entre a constituição (LTDA/SLU)
+  e a consolidação da alteração contratual. Revisar com o jurídico antes de alterar.
+  Uso: {{ corpo(ns, e, socios, unipessoal) }} onde ns = namespace(n=0).
+-#}
+{% macro titulo(ns, texto) -%}
+{% set ns.n = ns.n + 1 -%}
+**CLÁUSULA {{ ns.n | ordinal }} – {{ texto }}**
+{%- endmacro %}
+
+{% macro corpo(ns, e, socios, unipessoal) -%}
+{{ titulo(ns, "DO NOME EMPRESARIAL") }}
+
+A sociedade {% if unipessoal %}limitada unipessoal {% endif %}gira sob o nome empresarial **{{ e.nome_exibicao }}**{% if e.nome_fantasia %}, utilizando o nome fantasia **{{ e.nome_fantasia }}**{% endif %}.
+
+{{ titulo(ns, "DA SEDE") }}
+
+A sociedade tem sede na {{ e.endereco_sede.formatado() }}{% if e.area_utilizada_m2 %}, ocupando área de {{ e.area_utilizada_m2 }} m²{% endif %}, podendo abrir e encerrar filiais e outros estabelecimentos em qualquer parte do território nacional, mediante alteração contratual.
+
+{{ titulo(ns, "DO OBJETO SOCIAL") }}
+
+A sociedade tem por objeto: {{ e.objeto_social | trim | trim(".") }}.
+
+{{ titulo(ns, "DO INÍCIO DAS ATIVIDADES E DO PRAZO DE DURAÇÃO") }}
+
+A sociedade iniciará suas atividades {% if e.data_inicio_atividades %}em {{ e.data_inicio_atividades | data }}{% else %}na data do arquivamento deste instrumento na Junta Comercial do Estado de São Paulo{% endif %}, e seu prazo de duração é indeterminado.
+
+{{ titulo(ns, "DO CAPITAL SOCIAL") }}
+
+O capital social é de **{{ e.capital_social | reais }} ({{ e.capital_social | extenso }})**, dividido em {{ e.total_quotas | milhar }} ({{ e.total_quotas | inteiro_extenso }}) quotas de valor nominal de {{ e.valor_quota | reais }} ({{ e.valor_quota | extenso }}) cada uma, {% if e.capital_integralizado_no_ato %}totalmente subscritas e integralizadas, neste ato, em moeda corrente do País{% else %}totalmente subscritas, a serem integralizadas em moeda corrente do País até {{ e.prazo_integralizacao | data }}{% endif %}, assim distribuídas:
+
+| {{ "Sócio" if unipessoal else "Sócios" }} | Quotas | Valor (R$) | % |
+|---|---:|---:|---:|
+{% for s in socios -%}
+| {{ s.nome | upper }} | {{ s.quotas | milhar }} | {{ (s.quotas * e.valor_quota) | reais }} | {{ ("%.2f" | format(100 * s.quotas / e.total_quotas)) | replace(".", ",") }} |
+{% endfor -%}
+| **TOTAL** | **{{ e.total_quotas | milhar }}** | **{{ e.capital_social | reais }}** | **100,00** |
+
+{{ titulo(ns, "DA RESPONSABILIDADE") }}
+
+{% if unipessoal -%}
+A responsabilidade do sócio é restrita ao valor de suas quotas, nos termos do art. 1.052 do Código Civil.
+{%- else -%}
+A responsabilidade de cada sócio é restrita ao valor de suas quotas, mas todos respondem solidariamente pela integralização do capital social, nos termos do art. 1.052 do Código Civil.
+{%- endif %}
+
+{% if not unipessoal -%}
+{{ titulo(ns, "DA CESSÃO E TRANSFERÊNCIA DE QUOTAS") }}
+
+As quotas são indivisíveis e não poderão ser cedidas ou transferidas a terceiros sem o consentimento dos demais sócios, a quem fica assegurado, em igualdade de condições e na proporção de suas quotas, o direito de preferência para sua aquisição.
+
+{% endif -%}
+{{ titulo(ns, "DA ADMINISTRAÇÃO") }}
+
+A administração da sociedade cabe {% if e.administradores | length == 1 %}ao(à) sócio(a) **{{ e.administradores[0].nome | upper }}**{% else %}aos(às) sócios(as) {% for a in e.administradores %}**{{ a.nome | upper }}**{{ ", " if not loop.last and loop.revindex > 2 else (" e " if not loop.last else "") }}{% endfor %}{% endif %}, com os poderes e atribuições de representação ativa e passiva da sociedade, judicial e extrajudicialmente{% if e.administradores | length > 1 %}, {{ "em conjunto" if e.administracao_conjunta else "isoladamente" }}{% endif %}, podendo praticar todos os atos compreendidos no objeto social, sempre de interesse da sociedade, autorizado o uso do nome empresarial, vedado, no entanto, fazê-lo em atividades estranhas ao interesse social ou assumir obrigações seja em favor de qualquer {{ "dos quotistas" if not unipessoal else "pessoa" }} ou de terceiros, bem como onerar ou alienar bens imóveis da sociedade, sem autorização {{ "do outro sócio" if socios | length == 2 else ("dos demais sócios" if not unipessoal else "expressa do sócio") }}.
+
+{% if e.pro_labore -%}
+{{ titulo(ns, "DO PRÓ-LABORE") }}
+
+{{ "O sócio administrador poderá" if e.administradores | length == 1 else "Os sócios administradores poderão" }} fixar uma retirada mensal, a título de pró-labore, observadas as disposições regulamentares pertinentes.
+
+{% endif -%}
+{{ titulo(ns, "DO EXERCÍCIO SOCIAL E DOS LUCROS") }}
+
+Ao término de cada exercício social, em 31 de dezembro, o(s) administrador(es) prestará(ão) contas justificadas de sua administração, procedendo à elaboração do inventário, do balanço patrimonial e do balanço de resultado econômico, cabendo {{ "ao sócio" if unipessoal else "aos sócios, na proporção de suas quotas," }} os lucros ou perdas apurados.
+
+{{ titulo(ns, "DAS DELIBERAÇÕES") }}
+
+{% if unipessoal -%}
+As decisões que, nos termos da lei, seriam objeto de deliberação dos sócios serão tomadas pelo sócio único e formalizadas por escrito. Nos quatro meses seguintes ao término do exercício social, o sócio deliberará sobre as contas e designará administrador(es), quando for o caso.
+{%- else -%}
+Nos quatro meses seguintes ao término do exercício social, os sócios deliberarão sobre as contas e designarão administrador(es), quando for o caso, nos termos do art. 1.078 do Código Civil. As deliberações poderão ser tomadas em reunião ou por documento escrito assinado por todos os sócios, dispensadas as formalidades de convocação quando todos comparecerem ou se declararem cientes.
+{%- endif %}
+
+{{ titulo(ns, "DO FALECIMENTO OU INTERDIÇÃO") }}
+
+{% if unipessoal -%}
+Falecendo ou sendo interditado o sócio, a sociedade continuará suas atividades com os herdeiros, sucessores ou o representante legal do incapaz. Não sendo possível ou inexistindo interesse destes, o valor de seus haveres será apurado e liquidado com base na situação patrimonial da sociedade, à data da resolução, verificada em balanço especialmente levantado.
+{%- else -%}
+Falecendo ou sendo interditado qualquer sócio, a sociedade continuará suas atividades com os herdeiros, sucessores ou o representante legal do incapaz. Não sendo possível ou inexistindo interesse destes ou do(s) sócio(s) remanescente(s), o valor de seus haveres será apurado e liquidado com base na situação patrimonial da sociedade, à data da resolução, verificada em balanço especialmente levantado (arts. 1.028 e 1.031 do Código Civil).
+{%- endif %}
+
+{% if e.porte.value in ("ME", "EPP") -%}
+{{ titulo(ns, "DO ENQUADRAMENTO") }}
+
+{{ "O sócio declara" if unipessoal else "Os sócios declaram" }}, sob as penas da lei, que a sociedade se enquadra como {{ "Microempresa – ME" if e.porte.value == "ME" else "Empresa de Pequeno Porte – EPP" }}, nos termos da Lei Complementar nº 123, de 14 de dezembro de 2006, e que não se enquadra em qualquer das hipóteses de exclusão relacionadas no § 4º do art. 3º da referida lei.
+
+{% endif -%}
+{{ titulo(ns, "DA DECLARAÇÃO DE DESIMPEDIMENTO") }}
+
+{{ "O administrador declara" if e.administradores | length == 1 else "Os administradores declaram" }}, sob as penas da lei, que não {{ "está impedido" if e.administradores | length == 1 else "estão impedidos" }} de exercer a administração da sociedade, por lei especial, ou em virtude de condenação criminal, ou por se {{ "encontrar" if e.administradores | length == 1 else "encontrarem" }} sob os efeitos dela, a pena que vede, ainda que temporariamente, o acesso a cargos públicos; ou por crime falimentar, de prevaricação, peita ou suborno, concussão, peculato, ou contra a economia popular, contra o sistema financeiro nacional, contra normas de defesa da concorrência, contra as relações de consumo, fé pública ou a propriedade (art. 1.011, § 1º, do Código Civil).
+
+{{ titulo(ns, "DAS OMISSÕES") }}
+
+Os casos omissos neste contrato serão resolvidos com observância dos preceitos do Código Civil (Lei nº 10.406/2002) e de outros dispositivos legais aplicáveis.
+
+{{ titulo(ns, "DO FORO") }}
+
+Fica eleito o foro da Comarca de {{ e.endereco_sede.municipio }}/{{ e.endereco_sede.uf }} para o exercício e o cumprimento dos direitos e obrigações resultantes deste contrato.
+{%- endmacro %}
+
+{% macro assinaturas(socios, local, data) -%}
+{{ local }}, {{ data | data_extenso }}.
+
+{% for s in socios %}
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+**{{ s.nome | upper }}**
+CPF {{ s.cpf | cpf }}
+
+{% endfor %}
+_Documento a ser assinado digitalmente (assinatura eletrônica avançada gov.br ou qualificada ICP-Brasil)._
+{%- endmacro %}

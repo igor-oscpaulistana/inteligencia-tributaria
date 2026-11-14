@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.env
+.pytest_cache/
+# Dados de clientes (LGPD) nunca vão para o git
+dados/

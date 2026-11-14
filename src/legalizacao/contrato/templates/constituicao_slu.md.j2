@@ -1,0 +1,13 @@
+{% from "_clausulas.md.j2" import corpo, assinaturas -%}
+{% set ns = namespace(n=0) -%}
+# ATO DE CONSTITUIÇÃO DE SOCIEDADE LIMITADA UNIPESSOAL
+
+## {{ e.nome_exibicao }}
+
+{{ socios[0] | qualificacao }}, resolve constituir uma sociedade limitada unipessoal, nos termos do art. 1.052, §§ 1º e 2º, da Lei nº 10.406/2002 (Código Civil), que se regerá pelas cláusulas e condições seguintes:
+
+{{ corpo(ns, e, socios, True) }}
+
+E, por ser esta a expressão de sua vontade, o sócio assina o presente instrumento.
+
+{{ assinaturas(socios, local, data) }}

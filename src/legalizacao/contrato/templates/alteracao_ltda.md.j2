@@ -1,0 +1,40 @@
+{% from "_clausulas.md.j2" import corpo, assinaturas -%}
+{% set ns_alt = namespace(n=0) -%}
+{% set ns = namespace(n=0) -%}
+# {{ numero_alteracao | ordinal_alteracao }} ALTERAÇÃO CONTRATUAL E CONSOLIDAÇÃO DA SOCIEDADE
+
+## {{ e.nome_exibicao }}
+
+**CNPJ:** {{ e.cnpj | cnpj }} — **NIRE:** {{ e.nire }}
+
+Pelo presente instrumento particular, as partes abaixo qualificadas:
+
+{% for s in signatarios -%}
+{{ loop.index }}. {{ s | qualificacao }}{% if s.retirante %} (sócio(a) retirante){% elif s.ingressante %} (sócio(a) ingressante){% endif %};
+{% endfor %}
+na qualidade de sócios (e, quando indicado, de sócio ingressante) da sociedade empresária limitada acima identificada, com sede na {{ e.endereco_sede.formatado() }}, resolvem, de comum acordo, alterar o contrato social mediante as cláusulas seguintes:
+
+### DAS ALTERAÇÕES
+
+{% for a in alteracoes -%}
+{% set ns_alt.n = ns_alt.n + 1 -%}
+**CLÁUSULA {{ ns_alt.n | ordinal }}** – {{ a.descricao | trim }}
+
+{% endfor -%}
+{% set ns_alt.n = ns_alt.n + 1 -%}
+**CLÁUSULA {{ ns_alt.n | ordinal }}** – Em face das alterações acima, os sócios resolvem consolidar o contrato social, que passa a vigorar com a seguinte redação, ficando revogadas as disposições em contrário:
+
+---
+
+### CONSOLIDAÇÃO DO CONTRATO SOCIAL — {{ e.nome_exibicao }}
+
+{% for s in socios -%}
+{{ loop.index }}. {{ s | qualificacao }};
+{% endfor %}
+únicos sócios da sociedade, que se rege pelas cláusulas seguintes:
+
+{{ corpo(ns, e, socios, socios | length == 1) }}
+
+E, por estarem assim justos e contratados, assinam o presente instrumento.
+
+{{ assinaturas(signatarios, local, data) }}

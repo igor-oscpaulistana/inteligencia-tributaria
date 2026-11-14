@@ -1,0 +1,18 @@
+{% from "_clausulas.md.j2" import corpo, assinaturas -%}
+{% set ns = namespace(n=0) -%}
+# INSTRUMENTO PARTICULAR DE CONSTITUIÇÃO DE SOCIEDADE EMPRESÁRIA LIMITADA
+
+## {{ e.nome_exibicao }}
+
+Pelo presente instrumento particular, as partes abaixo qualificadas:
+
+{% for s in socios -%}
+{{ loop.index }}. {{ s | qualificacao }};
+{% endfor %}
+resolvem, de comum acordo, constituir uma sociedade empresária limitada, que se regerá pelas cláusulas e condições seguintes e, nas omissões, pela Lei nº 10.406/2002 (Código Civil):
+
+{{ corpo(ns, e, socios, False) }}
+
+E, por estarem assim justos e contratados, assinam o presente instrumento.
+
+{{ assinaturas(socios, local, data) }}
